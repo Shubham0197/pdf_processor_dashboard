@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+
+{% block title %}Job Detail | PDF Processing API{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Job Detail</h1>
+        {% if job.batch %}
+        <a href="/dashboard/batch/{{ job.batch.batch_id }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Batch
+        </a>
+        {% else %}
+        <a href="/dashboard/batches" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Batches
+        </a>
+        {% endif %}
+    </div>
+    
+    <!-- Job Overview Card -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">Job Information</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <table class="table table-borderless">
+                        <tr>
+                            <th>Job ID:</th>
+                            <td>{{ job.job_id }}</td>
+                        </tr>
+                        <tr>
+                            <th>Status:</th>
+                            <td>
+                                <span class="badge bg-{{ 'warning' if job.status == 'pending' else 'info' if job.status == 'processing' else 'success' if job.status == 'completed' else 'danger' }}">
+                                    {{ job.status }}
+                                </span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>File Name:</th>
+                            <td>{{ job.file_name }}</td>
+                        </tr>
+                        <tr>
+                            <th>File URL:</th>
+                            <td>
+                                <a href="{{ job.file_url }}" target="_blank">{{ job.file_url }}</a>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <table class="table table-borderless">
+                        <tr>
+                            <th>Created:</th>
+                            <td>{{ job.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        </tr>
+                        <tr>
+                            <th>Completed:</th>
+                            <td>
+                                {% if job.completed_at %}
+                                    {{ job.completed_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Processing Time:</th>
+                            <td>
+                                {% if job.processing_time %}
+                                    {{ (job.processing_time / 1000)|round(2) }} seconds
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Batch:</th>
+                            <td>
+                                {% if job.batch %}
+                                    <a href="/dashboard/batch/{{ job.batch.batch_id }}">{{ job.batch.batch_id }}</a>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+            
+            {% if job.error_message %}
+            <div class="alert alert-danger mt-3">
+                <h5><i class="fas fa-exclamation-triangle"></i> Error</h5>
+                <p>{{ job.error_message }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Results Tabs -->
+    {% if job.status == 'completed' %}
+    <div class="card mb-4">
+        <div class="card-header">
+            <ul class="nav nav-tabs card-header-tabs" id="resultTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="metadata-tab" data-bs-toggle="tab" data-bs-target="#metadata" type="button" role="tab" aria-controls="metadata" aria-selected="true">
+                        Metadata
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="references-tab" data-bs-toggle="tab" data-bs-target="#references" type="button" role="tab" aria-controls="references" aria-selected="false">
+                        References
+                    </button>
+                </li>
+                {% if job.extracted_text %}
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="text-tab" data-bs-toggle="tab" data-bs-target="#text" type="button" role="tab" aria-controls="text" aria-selected="false">
+                        Extracted Text
+                    </button>
+                </li>
+                {% endif %}
+                {% if job.webhook_response %}
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="webhook-tab" data-bs-toggle="tab" data-bs-target="#webhook" type="button" role="tab" aria-controls="webhook" aria-selected="false">
+                        Webhook Response
+                    </button>
+                </li>
+                {% endif %}
+            </ul>
+        </div>
+        <div class="card-body">
+            <div class="tab-content" id="resultTabsContent">
+                <!-- Metadata Tab -->
+                <div class="tab-pane fade show active" id="metadata" role="tabpanel" aria-labelledby="metadata-tab">
+                    {% if job.metadata %}
+                        <div class="position-relative">
+                            <button class="btn btn-sm btn-outline-secondary copy-btn" data-target="#metadataJson">
+                                <i class="fas fa-copy"></i> Copy
+                            </button>
+                            <pre class="json" id="metadataJson">{{ job.metadata|tojson(indent=2) }}</pre>
+                        </div>
+                        
+                        <!-- Formatted Metadata Display -->
+                        <div class="mt-4">
+                            <h4>Formatted Metadata</h4>
+                            <div class="card">
+                                <div class="card-body">
+                                    {% if job.metadata.title %}
+                                    <h3>{{ job.metadata.title }}</h3>
+                                    {% endif %}
+                                    
+                                    {% if job.metadata.authors %}
+                                    <div class="mb-3">
+                                        <h5>Authors</h5>
+                                        <ul class="list-unstyled">
+                                            {% for author in job.metadata.authors %}
+                                            <li>
+                                                {{ author.name }}
+                                                {% if author.affiliation %}
+                                                <small class="text-muted">({{ author.affiliation }})</small>
+                                                {% endif %}
+                                            </li>
+                                            {% endfor %}
+                                        </ul>
+                                    </div>
+                                    {% endif %}
+                                    
+                                    {% if job.metadata.abstract %}
+                                    <div class="mb-3">
+                                        <h5>Abstract</h5>
+                                        <p>{{ job.metadata.abstract }}</p>
+                                    </div>
+                                    {% endif %}
+                                    
+                                    {% if job.metadata.keywords %}
+                                    <div class="mb-3">
+                                        <h5>Keywords</h5>
+                                        <p>
+                                            {% for keyword in job.metadata.keywords %}
+                                            <span class="badge bg-secondary me-1">{{ keyword }}</span>
+                                            {% endfor %}
+                                        </p>
+                                    </div>
+                                    {% endif %}
+                                    
+                                    <div class="row">
+                                        {% if job.metadata.journal %}
+                                        <div class="col-md-6 mb-3">
+                                            <h5>Journal</h5>
+                                            <p>{{ job.metadata.journal }}</p>
+                                        </div>
+                                        {% endif %}
+                                        
+                                        {% if job.metadata.year %}
+                                        <div class="col-md-3 mb-3">
+                                            <h5>Year</h5>
+                                            <p>{{ job.metadata.year }}</p>
+                                        </div>
+                                        {% endif %}
+                                        
+                                        {% if job.metadata.volume or job.metadata.issue %}
+                                        <div class="col-md-3 mb-3">
+                                            <h5>Volume/Issue</h5>
+                                            <p>
+                                                {% if job.metadata.volume %}Vol. {{ job.metadata.volume }}{% endif %}
+                                                {% if job.metadata.issue %}No. {{ job.metadata.issue }}{% endif %}
+                                            </p>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                    
+                                    {% if job.metadata.doi %}
+                                    <div class="mb-3">
+                                        <h5>DOI</h5>
+                                        <p>
+                                            <a href="https://doi.org/{{ job.metadata.doi }}" target="_blank">
+                                                {{ job.metadata.doi }}
+                                            </a>
+                                        </p>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i> No metadata extracted.
+                        </div>
+                    {% endif %}
+                </div>
+                
+                <!-- References Tab -->
+                <div class="tab-pane fade" id="references" role="tabpanel" aria-labelledby="references-tab">
+                    {% if job.references %}
+                        <div class="position-relative">
+                            <button class="btn btn-sm btn-outline-secondary copy-btn" data-target="#referencesJson">
+                                <i class="fas fa-copy"></i> Copy
+                            </button>
+                            <pre class="json" id="referencesJson">{{ job.references|tojson(indent=2) }}</pre>
+                        </div>
+                        
+                        <!-- Formatted References Display -->
+                        <div class="mt-4">
+                            <h4>Formatted References</h4>
+                            <div class="list-group">
+                                {% for ref in job.references %}
+                                <div class="list-group-item">
+                                    <div class="d-flex w-100 justify-content-between">
+                                        <h5 class="mb-1">
+                                            {% if ref.title %}
+                                                {{ ref.title }}
+                                            {% else %}
+                                                Reference {{ loop.index }}
+                                            {% endif %}
+                                        </h5>
+                                        {% if ref.year %}
+                                        <small>{{ ref.year }}</small>
+                                        {% endif %}
+                                    </div>
+                                    
+                                    {% if ref.authors %}
+                                    <p class="mb-1">
+                                        <strong>Authors:</strong> {{ ref.authors }}
+                                    </p>
+                                    {% endif %}
+                                    
+                                    {% if ref.text %}
+                                    <p class="mb-1">{{ ref.text }}</p>
+                                    {% endif %}
+                                    
+                                    {% if ref.doi %}
+                                    <small>
+                                        <a href="https://doi.org/{{ ref.doi }}" target="_blank">
+                                            DOI: {{ ref.doi }}
+                                        </a>
+                                    </small>
+                                    {% endif %}
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i> No references extracted.
+                        </div>
+                    {% endif %}
+                </div>
+                
+                <!-- Extracted Text Tab -->
+                {% if job.extracted_text %}
+                <div class="tab-pane fade" id="text" role="tabpanel" aria-labelledby="text-tab">
+                    <div class="position-relative">
+                        <button class="btn btn-sm btn-outline-secondary copy-btn" data-target="#extractedText">
+                            <i class="fas fa-copy"></i> Copy
+                        </button>
+                        <pre id="extractedText" style="max-height: 500px; overflow-y: auto;">{{ job.extracted_text }}</pre>
+                    </div>
+                </div>
+                {% endif %}
+                
+                <!-- Webhook Response Tab -->
+                {% if job.webhook_response %}
+                <div class="tab-pane fade" id="webhook" role="tabpanel" aria-labelledby="webhook-tab">
+                    <div class="position-relative">
+                        <button class="btn btn-sm btn-outline-secondary copy-btn" data-target="#webhookJson">
+                            <i class="fas fa-copy"></i> Copy
+                        </button>
+                        <pre class="json" id="webhookJson">{{ job.webhook_response|tojson(indent=2) }}</pre>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

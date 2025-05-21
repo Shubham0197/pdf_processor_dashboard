@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Process PDF - PDF Processing API</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            margin: 0;
+        }
+        .nav-links {
+            display: flex;
+            gap: 20px;
+        }
+        .nav-links a {
+            color: #4a6cf7;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .nav-links a:hover {
+            text-decoration: underline;
+        }
+        .form-container {
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #555;
+        }
+        input[type="url"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+        button {
+            background-color: #4a6cf7;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 12px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #3a5ce5;
+        }
+        .results-container {
+            display: none;
+            margin-top: 30px;
+        }
+        .results-container.visible {
+            display: block;
+        }
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .results-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #333;
+        }
+        .status {
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .status.pending {
+            background-color: #f39c12;
+            color: white;
+        }
+        .status.processing {
+            background-color: #3498db;
+            color: white;
+        }
+        .status.completed {
+            background-color: #2ecc71;
+            color: white;
+        }
+        .status.failed {
+            background-color: #e74c3c;
+            color: white;
+        }
+        .json-viewer {
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            overflow: auto;
+            max-height: 500px;
+            font-family: 'Courier New', Courier, monospace;
+            white-space: pre-wrap;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .loading.visible {
+            display: block;
+        }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-top: 4px solid #4a6cf7;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .error-message {
+            color: #e74c3c;
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #fadbd8;
+            border-radius: 4px;
+            display: none;
+        }
+        .error-message.visible {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>PDF Processing API</h1>
+            <div class="nav-links">
+                <a href="/dashboard">Dashboard</a>
+                <a href="/process-pdf" class="active">Process PDF</a>
+                <a href="/logout">Logout</a>
+            </div>
+        </header>
+
+        <div class="form-container">
+            <h2>Process a PDF File</h2>
+            <p>Enter the URL of a PDF file to process and extract information using AI.</p>
+            
+            <div class="form-group">
+                <label for="pdf-url">PDF URL</label>
+                <input type="url" id="pdf-url" placeholder="https://example.com/document.pdf" required>
+            </div>
+            
+            <button id="process-btn">Process PDF</button>
+            
+            <div class="error-message" id="error-message"></div>
+        </div>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Processing your PDF. This may take a few moments...</p>
+        </div>
+        
+        <div class="results-container" id="results-container">
+            <div class="results-header">
+                <div class="results-title">Processing Results</div>
+                <div class="status" id="status">pending</div>
+            </div>
+            
+            <div class="json-viewer" id="json-results"></div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('process-btn').addEventListener('click', async function() {
+            const pdfUrl = document.getElementById('pdf-url').value.trim();
+            const errorMessage = document.getElementById('error-message');
+            const loading = document.getElementById('loading');
+            const resultsContainer = document.getElementById('results-container');
+            const jsonResults = document.getElementById('json-results');
+            const statusEl = document.getElementById('status');
+            
+            // Reset UI
+            errorMessage.textContent = '';
+            errorMessage.classList.remove('visible');
+            resultsContainer.classList.remove('visible');
+            
+            // Validate URL
+            if (!pdfUrl) {
+                errorMessage.textContent = 'Please enter a PDF URL';
+                errorMessage.classList.add('visible');
+                return;
+            }
+            
+            try {
+                // Show loading
+                loading.classList.add('visible');
+                
+                // Create a new processing job
+                const response = await fetch('/api/v1/jobs', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        file_url: pdfUrl
+                    })
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Failed to process PDF');
+                }
+                
+                const jobData = await response.json();
+                const jobId = jobData.job_id;
+                
+                // Poll for job status
+                let completed = false;
+                let attempts = 0;
+                const maxAttempts = 30; // 30 * 2 seconds = 60 seconds max wait time
+                
+                statusEl.textContent = jobData.status;
+                statusEl.className = 'status ' + jobData.status;
+                
+                while (!completed && attempts < maxAttempts) {
+                    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+                    
+                    const statusResponse = await fetch(`/api/v1/jobs/${jobId}`, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    });
+                    
+                    if (!statusResponse.ok) {
+                        throw new Error('Failed to check job status');
+                    }
+                    
+                    const statusData = await statusResponse.json();
+                    
+                    // Update status display
+                    statusEl.textContent = statusData.status;
+                    statusEl.className = 'status ' + statusData.status;
+                    
+                    if (statusData.status === 'completed' || statusData.status === 'failed') {
+                        completed = true;
+                        
+                        // Show results
+                        if (statusData.status === 'completed') {
+                            // Format and display the JSON results
+                            const formattedJson = JSON.stringify({
+                                extracted_text: statusData.extracted_text,
+                                metadata: statusData.doc_metadata,
+                                references: statusData.references
+                            }, null, 2);
+                            
+                            jsonResults.textContent = formattedJson;
+                        } else {
+                            jsonResults.textContent = `Error: ${statusData.error_message || 'Unknown error occurred'}`;
+                        }
+                        
+                        resultsContainer.classList.add('visible');
+                    }
+                    
+                    attempts++;
+                }
+                
+                if (!completed) {
+                    throw new Error('Processing is taking longer than expected. Please check the dashboard for results.');
+                }
+            } catch (error) {
+                errorMessage.textContent = error.message;
+                errorMessage.classList.add('visible');
+            } finally {
+                loading.classList.remove('visible');
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}PDF Processing API{% endblock %}</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom CSS -->
+    <style>
+        .sidebar {
+            min-height: 100vh;
+            background-color: #343a40;
+            color: white;
+        }
+        
+        .sidebar .nav-link {
+            color: rgba(255, 255, 255, 0.75);
+        }
+        
+        .sidebar .nav-link:hover {
+            color: rgba(255, 255, 255, 1);
+        }
+        
+        .sidebar .nav-link.active {
+            color: white;
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        
+        .main-content {
+            padding: 20px;
+        }
+        
+        .card {
+            margin-bottom: 20px;
+        }
+        
+        pre.json {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        
+        .copy-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 10;
+        }
+        
+        .status-badge {
+            font-size: 0.9rem;
+        }
+        
+        .status-pending {
+            background-color: #ffc107;
+        }
+        
+        .status-processing {
+            background-color: #17a2b8;
+        }
+        
+        .status-completed {
+            background-color: #28a745;
+        }
+        
+        .status-failed {
+            background-color: #dc3545;
+        }
+        
+        /* Custom styles for API key management */
+        .key-value-masked {
+            font-family: monospace;
+            letter-spacing: 2px;
+        }
+    </style>
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-md-3 col-lg-2 d-md-block sidebar collapse">
+                <div class="position-sticky pt-3">
+                    <div class="d-flex align-items-center justify-content-center mb-4">
+                        <h4 class="mb-0">PDF Processing API</h4>
+                    </div>
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link {% if active_page == 'dashboard' %}active{% endif %}" href="/dashboard">
+                                <i class="fas fa-tachometer-alt me-2"></i>
+                                Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if active_page == 'batches' %}active{% endif %}" href="/dashboard/batches">
+                                <i class="fas fa-layer-group me-2"></i>
+                                Batch Jobs
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if active_page == 'api_keys' %}active{% endif %}" href="/dashboard/api-keys">
+                                <i class="fas fa-key me-2"></i>
+                                API Keys
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if active_page == 'process_pdf' %}active{% endif %}" href="/process-pdf">
+                                <i class="fas fa-file-pdf me-2"></i>
+                                Process PDF
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if active_page == 'api_key' %}active{% endif %}" href="/api-key">
+                                <i class="fas fa-key me-2"></i>
+                                Gemini API Key
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/api/v1/docs" target="_blank">
+                                <i class="fas fa-book me-2"></i>
+                                API Documentation
+                            </a>
+                        </li>
+                    </ul>
+                    
+                    <hr>
+                    
+                    <div class="px-3 mt-4">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-user-circle me-2"></i>
+                            <span>{{ user.email }}</span>
+                        </div>
+                        <div class="mt-2">
+                            <a href="/api/v1/auth/logout" class="btn btn-sm btn-outline-light">
+                                <i class="fas fa-sign-out-alt me-1"></i> Logout
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Main content -->
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-content">
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Custom JS -->
+    <script>
+        // Function to format JSON for display
+        function formatJSON(json) {
+            if (typeof json === 'string') {
+                try {
+                    json = JSON.parse(json);
+                } catch (e) {
+                    return json;
+                }
+            }
+            return JSON.stringify(json, null, 2);
+        }
+        
+        // Initialize copy buttons
+        document.addEventListener('DOMContentLoaded', function() {
+            const copyButtons = document.querySelectorAll('.copy-btn');
+            
+            copyButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const target = document.querySelector(this.dataset.target);
+                    const text = target.textContent;
+                    
+                    navigator.clipboard.writeText(text).then(() => {
+                        // Change button text temporarily
+                        const originalText = this.innerHTML;
+                        this.innerHTML = '<i class="fas fa-check"></i> Copied!';
+                        
+                        setTimeout(() => {
+                            this.innerHTML = originalText;
+                        }, 2000);
+                    });
+                });
+            });
+        });
+    </script>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block title %}API Keys | PDF Processing API{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>API Keys</h1>
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createKeyModal">
+            <i class="fas fa-plus"></i> Create New Key
+        </button>
+    </div>
+    
+    {% if request.query_params.get('success') %}
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        {{ request.query_params.get('message', 'Operation completed successfully') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+    
+    <div class="card">
+        <div class="card-body">
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i> API keys are encrypted before being stored in the database. The full key value is only shown once when created.
+            </div>
+            
+            {% if api_keys %}
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Type</th>
+                                <th>Description</th>
+                                <th>Created</th>
+                                <th>Last Used</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for key in api_keys %}
+                                <tr>
+                                    <td>{{ key.name }}</td>
+                                    <td><span class="badge bg-info">{{ key.key_type }}</span></td>
+                                    <td>{{ key.description or "" }}</td>
+                                    <td>{{ key.created_at.strftime('%Y-%m-%d') }}</td>
+                                    <td>
+                                        {% if key.last_used_at %}
+                                            {{ key.last_used_at.strftime('%Y-%m-%d %H:%M') }}
+                                        {% else %}
+                                            Never
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if key.is_active %}
+                                            <span class="badge bg-success">Active</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">Inactive</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group">
+                                            <button type="button" class="btn btn-sm btn-outline-primary" 
+                                                    data-bs-toggle="modal" data-bs-target="#editKeyModal{{ key.id }}">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-danger" 
+                                                    data-bs-toggle="modal" data-bs-target="#deleteKeyModal{{ key.id }}">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i> No API keys found. Please create a new key.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Create Key Modal -->
+<div class="modal fade" id="createKeyModal" tabindex="-1" aria-labelledby="createKeyModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="/dashboard/api-keys/create">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="createKeyModalLabel">Create New API Key</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Name</label>
+                        <input type="text" class="form-control" id="name" name="name" required>
+                        <div class="form-text">A descriptive name for this API key</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="key_type" class="form-label">Key Type</label>
+                        <select class="form-select" id="key_type" name="key_type" required>
+                            <option value="">Select a key type</option>
+                            <option value="gemini">Google Gemini API</option>
+                            <option value="webhook_auth">Webhook Authentication</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="key_value" class="form-label">Key Value (Optional)</label>
+                        <input type="text" class="form-control" id="key_value" name="key_value">
+                        <div class="form-text">Leave blank to auto-generate a secure key</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description (Optional)</label>
+                        <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+                    </div>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="is_active" name="is_active" checked>
+                        <label class="form-check-label" for="is_active">Active</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Key</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit and Delete Modals for each key -->
+{% for key in api_keys %}
+<!-- Edit Key Modal -->
+<div class="modal fade" id="editKeyModal{{ key.id }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="/dashboard/api-keys/{{ key.id }}/update">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit API Key</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="name{{ key.id }}" class="form-label">Name</label>
+                        <input type="text" class="form-control" id="name{{ key.id }}" name="name" 
+                               value="{{ key.name }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="description{{ key.id }}" class="form-label">Description</label>
+                        <textarea class="form-control" id="description{{ key.id }}" name="description" rows="3">{{ key.description or "" }}</textarea>
+                    </div>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="is_active{{ key.id }}" 
+                               name="is_active" {% if key.is_active %}checked{% endif %}>
+                        <label class="form-check-label" for="is_active{{ key.id }}">Active</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Key Modal -->
+<div class="modal fade" id="deleteKeyModal{{ key.id }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="/dashboard/api-keys/{{ key.id }}/delete">
+                <div class="modal-header">
+                    <h5 class="modal-title">Delete API Key</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to delete the API key "{{ key.name }}"?</p>
+                    <p class="text-danger">This action cannot be undone.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% endblock %}

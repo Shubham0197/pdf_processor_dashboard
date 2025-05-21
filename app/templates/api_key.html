@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}API Key Management{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h3 class="mb-0">Google Gemini API Key</h3>
+                </div>
+                <div class="card-body">
+                    <p class="mb-4">
+                        Enter your Google Gemini API key below. This key will be used to process PDF documents using AI.
+                        You can get a Gemini API key from the <a href="https://ai.google.dev/" target="_blank">Google AI Studio</a>.
+                    </p>
+                    
+                    {% if message %}
+                        <div class="alert alert-{{ message_type }}">{{ message }}</div>
+                    {% endif %}
+                    
+                    <form action="/save-api-key" method="post">
+                        <div class="form-group mb-3">
+                            <label for="keyValue">Gemini API Key</label>
+                            <input type="text" class="form-control" id="keyValue" name="key_value" placeholder="Enter your Gemini API key" required>
+                        </div>
+                        <div class="form-group mb-3">
+                            <label for="description">Description (optional)</label>
+                            <input type="text" class="form-control" id="description" name="description" placeholder="API key description" value="Google Gemini API Key">
+                        </div>
+                        <input type="hidden" name="key_type" value="gemini">
+                        <input type="hidden" name="is_active" value="true">
+                        <button type="submit" class="btn btn-primary">Save API Key</button>
+                    </form>
+                    
+                    <div class="mt-4">
+                        <h5>Why do I need an API key?</h5>
+                        <p>
+                            The PDF processing feature uses Google's Gemini AI to extract metadata and references from PDF documents.
+                            Your API key is securely stored and only used for processing your documents.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
