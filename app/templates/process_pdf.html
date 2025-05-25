@@ -259,42 +259,93 @@
             }
         }
         
-        // Copy JSON to clipboard
-        document.getElementById('copy-json-btn').addEventListener('click', function() {
-            const jsonContent = document.getElementById('json-results').textContent;
-            if (jsonContent) {
-                navigator.clipboard.writeText(jsonContent)
-                    .then(() => {
-                        alert('JSON copied to clipboard!');
-                    })
-                    .catch(err => {
-                        alert('Error copying JSON: ' + err);
-                    });
-            } else {
-                alert('No JSON content to copy');
-            }
-        });
-        
-        // Save JSON to file
-        document.getElementById('save-json-btn').addEventListener('click', function() {
-            const jsonContent = document.getElementById('json-results').textContent;
-            const pdfUrl = document.getElementById('pdf-url').value.trim();
+        // Function to copy text to clipboard (fallback method if clipboard API fails)
+        function fallbackCopyTextToClipboard(text) {
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
             
-            if (jsonContent) {
-                const filename = getFilenameFromUrl(pdfUrl) + '.json';
-                const blob = new Blob([jsonContent], {type: 'application/json'});
-                const url = URL.createObjectURL(blob);
-                
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            } else {
-                alert('No JSON content to save');
+            // Make the textarea out of viewport
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-999999px';
+            textArea.style.top = '-999999px';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            let successful = false;
+            try {
+                successful = document.execCommand('copy');
+            } catch (err) {
+                console.error('Fallback: Oops, unable to copy', err);
             }
+            
+            document.body.removeChild(textArea);
+            return successful;
+        }
+        
+        // Function to copy text to clipboard (using modern API with fallback)
+        function copyTextToClipboard(text) {
+            if (!navigator.clipboard) {
+                // Clipboard API not available, use fallback
+                const success = fallbackCopyTextToClipboard(text);
+                if (success) {
+                    alert('JSON copied to clipboard!');
+                } else {
+                    alert('Failed to copy JSON to clipboard');
+                }
+                return;
+            }
+            
+            // Use Clipboard API
+            navigator.clipboard.writeText(text)
+                .then(() => {
+                    alert('JSON copied to clipboard!');
+                })
+                .catch(err => {
+                    console.error('Clipboard API error:', err);
+                    // Try fallback method
+                    const success = fallbackCopyTextToClipboard(text);
+                    if (success) {
+                        alert('JSON copied to clipboard!');
+                    } else {
+                        alert('Failed to copy JSON to clipboard');
+                    }
+                });
+        }
+        
+        // Setup event listeners when DOM is fully loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            // Copy JSON to clipboard
+            document.getElementById('copy-json-btn').addEventListener('click', function() {
+                const jsonContent = document.getElementById('json-results').textContent;
+                if (jsonContent) {
+                    copyTextToClipboard(jsonContent);
+                } else {
+                    alert('No JSON content to copy');
+                }
+            });
+            
+            // Save JSON to file
+            document.getElementById('save-json-btn').addEventListener('click', function() {
+                const jsonContent = document.getElementById('json-results').textContent;
+                const pdfUrl = document.getElementById('pdf-url').value.trim();
+                
+                if (jsonContent) {
+                    const filename = getFilenameFromUrl(pdfUrl) + '.json';
+                    const blob = new Blob([jsonContent], {type: 'application/json'});
+                    const url = URL.createObjectURL(blob);
+                    
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                } else {
+                    alert('No JSON content to copy');
+                }
+            });
         });
         
         document.getElementById('process-btn').addEventListener('click', async function() {
