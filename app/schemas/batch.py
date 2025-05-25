@@ -20,7 +20,7 @@ class BatchRequest(BaseModel):
     batch_id: Optional[str] = Field(None, description="Optional client-side batch identifier")
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "webhook_url": "https://example.com/webhook",
                 "files": [
@@ -44,7 +44,7 @@ class BatchResponse(BaseModel):
     estimated_completion_time: Optional[datetime] = Field(None, description="Estimated completion time")
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class BatchStatusResponse(BatchResponse):
     processed_files: int = Field(0, description="Number of files processed")
@@ -52,4 +52,4 @@ class BatchStatusResponse(BatchResponse):
     completed_at: Optional[datetime] = Field(None, description="When the batch was completed")
     
     class Config:
-        orm_mode = True
+        from_attributes = True

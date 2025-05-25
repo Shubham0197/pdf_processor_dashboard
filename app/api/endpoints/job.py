@@ -120,7 +120,8 @@ async def create_job(
             options = {
                 "extract_metadata": True,
                 "extract_references": True,
-                "extract_full_text": False  # Don't include full text in the response
+                "extract_full_text": False,  # Don't include full text in the response
+                "complete_references": job.complete_references  # New option for complete references extraction
             }
             
             # Call the existing process_pdf function which uses Gemini

@@ -24,7 +24,7 @@ class APIKeyInDB(APIKeyBase):
     last_used_at: Optional[datetime] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class APIKeyResponse(APIKeyBase):
     id: int
@@ -33,4 +33,4 @@ class APIKeyResponse(APIKeyBase):
     last_used_at: Optional[datetime] = None
     
     class Config:
-        orm_mode = True
+        from_attributes = True

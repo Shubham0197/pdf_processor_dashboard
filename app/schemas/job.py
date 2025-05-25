@@ -8,6 +8,7 @@ class JobBase(BaseModel):
 
 class JobCreate(JobBase):
     batch_id: Optional[int] = Field(None, description="ID of the batch this job belongs to")
+    complete_references: Optional[bool] = Field(False, description="Whether to extract complete references using multiple API calls")
 
 class JobUpdate(BaseModel):
     status: Optional[str] = Field(None, description="Status of the job")
@@ -32,7 +33,7 @@ class JobInDB(JobBase):
     webhook_sent: bool
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class JobResponse(BaseModel):
     job_id: str
@@ -53,7 +54,7 @@ class JobResult(BaseModel):
     processing_time: Optional[int] = None
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class BatchWebhookPayload(BaseModel):
     batch_id: str

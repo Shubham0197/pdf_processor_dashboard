@@ -87,7 +87,8 @@ async def process_pdf(file_url: str, db: AsyncSession, options=None):
                     pdf_path=pdf_path,
                     db=db,
                     extract_metadata=options.get("extract_metadata", True),
-                    extract_references=options.get("extract_references", True)
+                    extract_references=options.get("extract_references", True),
+                    complete_references=options.get("complete_references", False)
                 )
                 
                 # Add the results to our response

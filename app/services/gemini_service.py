@@ -25,7 +25,7 @@ async def configure_gemini(db: AsyncSession):
         print(f"Error configuring Gemini API: {e}")
         return False
 
-async def process_pdf_directly(pdf_path: str, db: AsyncSession, extract_metadata=True, extract_references=True):
+async def process_pdf_directly(pdf_path: str, db: AsyncSession, extract_metadata=True, extract_references=True, complete_references=False):
     """Process a PDF file directly using Google Gemini API without text extraction"""
     # Ensure Gemini is configured
     if not await configure_gemini(db):
@@ -88,18 +88,25 @@ async def process_pdf_directly(pdf_path: str, db: AsyncSession, extract_metadata
         - "last_name"
         - "email"
         - "mobile_no"
-        - "position" (job title or role, e.g., "Project Assistant-II", "Professor", "Research Scholar")
+        - "designation" (job title or role, e.g., "Project Assistant-II", "Professor", "Research Scholar")
         - "institution" (name of the institution only, e.g., "CSIR - National Environmental Engineering Research Institute")
         - "orcid_id"
         - "department"
-        - "location" (city, state, country of the institution)
+        - "address" (city, state, country of the institution)
+        - "affiliation" (affiliation of the author)
+        - "city"
+        - "state"
+        - "country"
+        - "pincode"
         
-        IMPORTANT: Separate the position from the institution name. For example, if the affiliation is "Project Assistant-II, CSIR - National Environmental Engineering Research Institute, Nagpur-440020 (India)", then:
-        - position = "Project Assistant-II"
+        IMPORTANT: Separate the designation from the institution name. For example, if the affiliation is "Project Assistant-II, CSIR - National Environmental Engineering Research Institute, Nagpur-440020 (India)", then:
+        - designation = "Project Assistant-II"
         - institution = "CSIR - National Environmental Engineering Research Institute"
-        - location = "Nagpur-440020, India"
-
-        For pages show as the start page and end page number. e.g., "1-10"
+        - address = "Nagpur-440020, India"
+        - city = "Nagpur"
+        - state = "Maharashtra"
+        - country = "India"
+        - pincode = "440020"
         
         IMPORTANT: If you cannot extract some information, use null or empty arrays as appropriate. Always return valid JSON.
             """
@@ -161,7 +168,20 @@ async def process_pdf_directly(pdf_path: str, db: AsyncSession, extract_metadata
             
             IMPORTANT: If you don't find any references in the text, look carefully for numbered citations, bracketed citations, or any list of sources at the end of the document. References might be formatted in various ways.
             
-            For example, for the reference "1. Akram, f., O. Ilyas and B. A. K. Prusty (2015). International Journal of Engineering Technology Science and Research 2(10): 1-11.", provide:
+            EXTREMELY IMPORTANT - CITATION CONTINUITY ACROSS PAGES:
+            1. You MUST carefully check for citations that span across multiple pages or columns.
+            2. A citation is likely continuing from the previous page if:
+               - It starts without a citation number but is in the references section
+               - It starts mid-sentence or with lowercase letters
+               - It starts with "and" or other conjunctions
+               - It lacks author information but contains publication details
+               - The previous page ends with an incomplete citation
+            3. NEVER create two separate citations when one citation spans across pages.
+            4. ALWAYS join text that belongs to the same citation, even if it appears on different pages.
+            5. IMPORTANT EXAMPLE: If you see "19. Zeidan, F.Y.; San Andres, L. & Vance, J.M. Design and" at the bottom of one page and "application of squeeze film dampers in rotating machinery. Proceedings of the Twenty-Fifth Turbomachinery Symposium, 1996." at the top of the next page, this is ONE citation, not two.
+            
+            
+            For example, for the reference "1. Akram, f., O. Ilyas and B. A. K. Prusty (2015). International Journal of Engineering Technology Science and Research 2(10): 1-11. /n doi: 10.14429/dsj.60.57", provide:
             - text: "1. Akram, f., O. Ilyas and B. A. K. Prusty (2015). International Journal of Engineering Technology Science and Research 2(10): 1-11."
             - citation_type: "journal article"
             - authors: ["Akram, F.", "Ilyas, O.", "Prusty, B.A.K."]
@@ -171,6 +191,9 @@ async def process_pdf_directly(pdf_path: str, db: AsyncSession, extract_metadata
             - volume: "2"
             - issue: "10"
             - pages: "1-11"
+            - doi: "10.14429/dsj.60.57"
+            - url: (extract if present)
+            - publisher: (extract if present)
             - citation_position: "1"
             
             Return the information in a structured JSON format as an array of reference objects.
@@ -181,17 +204,198 @@ async def process_pdf_directly(pdf_path: str, db: AsyncSession, extract_metadata
                 # Process the PDF directly
                 if size < 20 * 1024 * 1024:  # Less than 20MB
                     pdf_bytes = path.read_bytes()
-                    contents = [
-                        types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
-                        references_prompt
-                    ]
-                    print("Sending PDF directly to Gemini API for references extraction")
-                    print("📨 Sending to Gemini model...")
-                    response = client.models.generate_content(model=model_name, contents=contents)
                     
-                    # Parse the references response
-                    references = await parse_gemini_response(response, is_metadata=False)
-                    results["references"] = references
+                    if not complete_references:
+                        # Regular extraction - single request
+                        contents = [
+                            types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
+                            references_prompt
+                        ]
+                        print("Sending PDF directly to Gemini API for references extraction")
+                        print("📨 Sending to Gemini model...")
+                        response = client.models.generate_content(model=model_name, contents=contents)
+                        
+                        # Parse the references response
+                        references = await parse_gemini_response(response, is_metadata=False)
+                        results["references"] = references
+                    else:
+                        # Complete references extraction with multiple requests if needed
+                        print("Using complete references extraction mode - handling large reference lists")
+                        
+                        # Initial request for references
+                        initial_prompt = """
+                        Extract all references/citations from this academic article.
+                        
+                        IMPORTANT: If there are many references, indicate how many references you found in total at the beginning of your response.
+                        For example: "Found 87 references in total."
+                        
+                        Then extract the first 25 references with details. For each reference, provide:
+                        1. Full reference text (exactly as it appears in the document)
+                        2. Citation type (journal article, book, conference paper, website/URL, etc.)
+                        3. Authors (list of all authors)
+                        4. Title of the referenced work
+                        5. Year of publication
+                        6. Journal name (if it's a journal article)
+                        7. Volume and issue numbers (if applicable)
+                        8. Page numbers (if available)
+                        9. DOI (if available)
+                        10. URL (if it's a web resource)
+                        11. Publisher (if it's a book)
+                        12. Citation position (e.g., reference number in the bibliography)
+                        
+                        Return the information in a structured JSON format as an array of reference objects.
+                        Also include a field 'total_references' with the total number found, and 'extracted_count' with the number you've extracted in this response.
+                        If more references exist than what you've extracted, include 'has_more' field set to true.
+                        
+                        IMPORTANT: Look carefully through the entire document for numbered citations, bracketed citations, or lists of sources at the end of the document.
+                        """
+                        
+                        contents = [
+                            types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
+                            initial_prompt
+                        ]
+                        print("📨 Sending initial request to Gemini model for references...")
+                        response = client.models.generate_content(model=model_name, contents=contents)
+                        
+                        # Parse the initial response
+                        all_references = []
+                        initial_results = await parse_gemini_response(response, is_metadata=False)
+                        
+                        # Parse the response structure
+                        # The response could be either a list of references or a dict with metadata and references
+                        total_refs = 0
+                        extracted_count = 0
+                        references_list = []
+                        has_more = False
+                        
+                        # Handle the case where we get a dictionary with metadata
+                        if isinstance(initial_results, dict):
+                            # Get metadata about total references from the top-level dictionary
+                            total_refs = initial_results.get("total_references", 0)
+                            extracted_count = initial_results.get("extracted_count", 0)
+                            has_more = initial_results.get("has_more", False)
+                            print(f"Metadata from response: total_refs={total_refs}, extracted_count={extracted_count}, has_more={has_more}")
+                            
+                            # Check if there's a references key containing the actual references
+                            if "references" in initial_results and isinstance(initial_results["references"], list):
+                                references_list = initial_results["references"]
+                                print(f"Found {len(references_list)} references in 'references' key")
+                                all_references.extend(references_list)
+                            else:
+                                print("Warning: No valid references list found in the dictionary response")
+                        # Handle the case where we get a list of references directly
+                        elif isinstance(initial_results, list):
+                            all_references.extend(initial_results)
+                            extracted_count = len(initial_results)
+                            print(f"Received a list of {extracted_count} references directly")
+                            
+                            # Try to find metadata about total references in the first item
+                            if len(initial_results) > 0 and isinstance(initial_results[0], dict):
+                                if "total_references" in initial_results[0]:
+                                    total_refs = initial_results[0].get("total_references", 0)
+                                    print(f"Found total_references={total_refs} in first reference item")
+                                if "has_more" in initial_results[0]:
+                                    has_more = initial_results[0].get("has_more", False)
+                                    print(f"Found has_more={has_more} in first reference item")
+                        
+                        # Force has_more to true if we know we have more references based on total_refs
+                        if total_refs > 0 and len(all_references) < total_refs:
+                            has_more = True
+                            print(f"Setting has_more=True because we have {len(all_references)} of {total_refs} total references")
+                                    
+                        print(f"Initial extraction: {len(all_references)} references, total expected: {total_refs}, has_more: {has_more}")
+                        
+                        # Calculate how many batches we'll need (25 references per batch)
+                        # Add a buffer of 2 extra requests just to be safe
+                        required_batches = 1  # We already made the first request
+                        if total_refs > 0:
+                            required_batches += (total_refs - len(all_references) + 24) // 25
+                            print(f"Based on total_refs={total_refs}, we need approximately {required_batches} more batches")
+                        elif has_more:
+                            # If we don't know the total but has_more is true, we'll use a default limit
+                            required_batches = 10
+                            print(f"Unknown total references but has_more=True, will try up to {required_batches} batches")
+                        
+                        # Cap the maximum number of attempts to avoid excessive API calls
+                        max_attempts = min(required_batches, 15)  # Never make more than 15 requests total
+                        current_attempt = 0
+                        
+                        # Continue making requests until we have all references or reach our limit
+                        while (has_more or (total_refs > 0 and len(all_references) < total_refs)) and current_attempt < max_attempts:
+                            current_attempt += 1
+                            current_count = len(all_references)
+                            
+                            # Prepare follow-up request for the next batch of references
+                            followup_prompt = f"""
+                            Continue extracting references from the academic article.
+                            You have already extracted {current_count} references out of approximately {total_refs} total references.
+                            
+                            Please continue from reference #{current_count + 1} and extract exactly 25 more references.
+                            Use the same format as before, providing the following for each reference:
+                            1. Full reference text (exactly as it appears in the document)
+                            2. Citation type (journal article, book, conference paper, website/URL, etc.)
+                            3. Authors (list of all authors)
+                            4. Title of the referenced work
+                            5. Year of publication
+                            6. Journal name (if it's a journal article)
+                            7. Volume and issue numbers (if applicable)
+                            8. Page numbers (if available)
+                            9. DOI (if available)
+                            10. URL (if it's a web resource)
+                            11. Publisher (if it's a book)
+                            12. Citation position (e.g., reference number in the bibliography)
+                            
+                            Return ONLY the array of reference objects in JSON format, without any introduction or explanation.
+                            If there are no more references to extract, return an empty array [].
+                            """
+                            
+                            contents = [
+                                types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
+                                followup_prompt
+                            ]
+                            print(f"📨 Sending follow-up request #{current_attempt} to Gemini model for additional references...")
+                            response = client.models.generate_content(model=model_name, contents=contents)
+                            
+                            # Parse the follow-up response
+                            followup_results = await parse_gemini_response(response, is_metadata=False)
+                            
+                            # Process the follow-up results
+                            new_references = []
+                            if isinstance(followup_results, dict) and "references" in followup_results:
+                                new_references = followup_results["references"]
+                                has_more = followup_results.get("has_more", False)
+                                # Update total_refs if it's available and larger than our current value
+                                if "total_references" in followup_results and followup_results["total_references"] > total_refs:
+                                    total_refs = followup_results["total_references"]
+                                    print(f"Updated total_references to {total_refs} from follow-up response")
+                            elif isinstance(followup_results, list):
+                                new_references = followup_results
+                                
+                            # Force has_more to true if we know we have more references based on total_refs
+                            if total_refs > 0 and (len(all_references) + len(new_references)) < total_refs:
+                                has_more = True
+                                print(f"Setting has_more=True because we still need more references to reach {total_refs}")
+                                
+                            # Add new references to our collection
+                            if isinstance(new_references, list):
+                                all_references.extend(new_references)
+                                print(f"Batch #{current_attempt}: Got {len(new_references)} more references, total now: {len(all_references)}")
+                                
+                            # Check if we've received any new references
+                            if len(new_references) == 0:
+                                print("No new references received, stopping further requests")
+                                break
+                            # Check if we're making progress
+                            if len(all_references) == current_count:
+                                print("No new references added to the total, stopping further requests")
+                                break
+                            # Check if we've reached or exceeded the total count
+                            if total_refs > 0 and len(all_references) >= total_refs:
+                                print(f"Reached total reference count ({total_refs}), stopping further requests")
+                                break
+                        
+                        print(f"Total references extracted: {len(all_references)}")
+                        results["references"] = all_references
                 else:
                     pdf_io = io.BytesIO(path.read_bytes())
                     uploaded_file = client.files.upload(
@@ -283,8 +487,43 @@ async def parse_gemini_response(response, is_metadata=True):
             print(f"Using raw text as JSON (last resort): {json_str[:200]}..." if len(json_str) > 200 else json_str)
         
         # Clean and parse JSON
-        parsed_json = json.loads(json_str)
-        print(f"Successfully parsed JSON response")
+        try:
+            # First attempt to parse as is
+            parsed_json = json.loads(json_str)
+            print(f"Successfully parsed JSON response")
+        except json.JSONDecodeError as e:
+            print(f"JSON decode error: {e}")
+            
+            # Clean up control characters and invalid JSON characters
+            # Replace common problematic characters
+            cleaned_json = re.sub(r'[\x00-\x1F\x7F-\x9F]', '', json_str)
+            
+            try:
+                parsed_json = json.loads(cleaned_json)
+                print(f"Successfully parsed JSON after cleaning control characters")
+            except json.JSONDecodeError:
+                # More aggressive cleaning
+                # Only keep basic ASCII printable characters plus newlines
+                ultra_clean_json = ''.join(c for c in json_str if (c.isprintable() or c == '\n'))
+                
+                try:
+                    parsed_json = json.loads(ultra_clean_json)
+                    print(f"Successfully parsed JSON after aggressive cleaning")
+                except json.JSONDecodeError as final_e:
+                    print(f"Still failed to parse JSON after cleaning: {final_e}")
+                    # Create a fallback response with an error message
+                    if is_metadata:
+                        return MetadataResponse(
+                            title="Could not extract metadata",
+                            abstract="Error parsing response",
+                            error=f"Failed to parse JSON: {str(final_e)}"
+                        ).dict(exclude_none=True)
+                    else:
+                        return [Reference(
+                            text="Error parsing references",
+                            citation_type="error",
+                            error=f"Failed to parse JSON: {str(final_e)}"
+                        ).dict(exclude_none=True)]
         
         # Validate and convert to appropriate model
         if is_metadata:

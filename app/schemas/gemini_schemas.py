@@ -9,17 +9,20 @@ class Author(BaseModel):
     last_name: Optional[str] = None
     email: Optional[str] = None
     mobile_no: Optional[str] = None
-    position: Optional[str] = None
+    designation: Optional[str] = None
     institution: Optional[str] = None
     department: Optional[str] = None
     orcid_id: Optional[str] = None
-    location: Optional[str] = None
+    address: Optional[str] = None
+    affiliation: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    country: Optional[str] = None
+    pincode: Optional[str] = None
     
     class Config:
         # Allow extra fields to be included in the model
         extra = 'ignore'
-        # Allow conversion between types where possible
-        smart_union = True
 
 
 class MetadataResponse(BaseModel):
@@ -39,8 +42,6 @@ class MetadataResponse(BaseModel):
     class Config:
         # Allow extra fields to be included in the model
         extra = 'ignore'
-        # Allow conversion between types where possible
-        smart_union = True
     
     @validator('authors', pre=True)
     def validate_authors(cls, v):
@@ -98,8 +99,6 @@ class ReferencesResponse(BaseModel):
     class Config:
         # Allow extra fields to be included in the model
         extra = 'ignore'
-        # Allow conversion between types where possible
-        smart_union = True
     
     @validator('references', pre=True)
     def validate_references(cls, v):
@@ -131,5 +130,3 @@ class PDFProcessingResult(BaseModel):
     class Config:
         # Allow extra fields to be included in the model
         extra = 'ignore'
-        # Allow conversion between types where possible
-        smart_union = True

@@ -181,6 +181,11 @@
                 <input type="url" id="pdf-url" placeholder="https://example.com/document.pdf" required>
             </div>
             
+            <div class="form-group" style="display: flex; align-items: center;">
+                <input type="checkbox" id="complete-references" style="margin-right: 10px;">
+                <label for="complete-references">Extract complete references (for papers with extensive reference lists)</label>
+            </div>
+            
             <button id="process-btn">Process PDF</button>
             
             <div class="error-message" id="error-message"></div>
@@ -234,7 +239,8 @@
                         'Accept': 'application/json'
                     },
                     body: JSON.stringify({
-                        file_url: pdfUrl
+                        file_url: pdfUrl,
+                        complete_references: document.getElementById('complete-references').checked
                     })
                 });
                 
