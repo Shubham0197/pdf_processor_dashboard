@@ -68,41 +68,72 @@ async def process_pdf_directly(pdf_path: str, db: AsyncSession, extract_metadata
         # Extract metadata if requested
         if extract_metadata:
             metadata_prompt = """
-        Extract the following metadata from this academic article:
-        - Title
-        - Authors (with detailed information)
-        - Abstract
-        - Keywords
-        - Journal name
-        - Volume and issue numbers
-        - Year of publication
-        - DOI
-        - Pages
-        
-        Return the information in a structured JSON format with these exact keys:
-        "title", "authors", "abstract", "keywords", "journal", "volume", "issue", "year", "doi", "pages"
-        
-        For authors, use an array of objects with the following properties (if available):
-        - "name" (full name)
-        - "first_name"
-        - "last_name"
-        - "email"
-        - "mobile_no"
-        - "position" (job title or role, e.g., "Project Assistant-II", "Professor", "Research Scholar")
-        - "institution" (name of the institution only, e.g., "CSIR - National Environmental Engineering Research Institute")
-        - "orcid_id"
-        - "department"
-        - "location" (city, state, country of the institution)
-        
-        IMPORTANT: Separate the position from the institution name. For example, if the affiliation is "Project Assistant-II, CSIR - National Environmental Engineering Research Institute, Nagpur-440020 (India)", then:
-        - position = "Project Assistant-II"
-        - institution = "CSIR - National Environmental Engineering Research Institute"
-        - location = "Nagpur-440020, India"
+Extract structured bibliographic data from this academic paper. Respond ONLY with a single JSON object (no markdown, no comments).  
 
-        For pages show as the start page and end page number. e.g., "1-10"
-        
-        IMPORTANT: If you cannot extract some information, use null or empty arrays as appropriate. Always return valid JSON.
-            """
+Your output MUST have exactly two top-level keys:
+
+1. **metadata** – an object containing the paper’s core details:
+   {
+     "title":               "Full title of the paper",
+     "abstract":            "Full abstract text",
+     "journal":             "Name of the journal",
+     "volume":              "Volume number or null",
+     "issue":               "Issue number or null",
+     "year":                "Year of publication or null",
+     "doi":                 "DOI if available or null",
+     "keywords":            ["list", "of", "keywords"],
+     "authors": [
+       {
+         "first_name":     "First",
+         "last_name":      "Last",
+         "email":          "author@example.com",
+         "mobile_no":      "optional",
+         "position":       "Professor, Researcher, etc.",
+         "institution":    "University or Organization",
+         "department":     "Department name",
+         "orcid_id":       "ORCID ID or null",
+         "location":       "Geographic location or null"
+       }
+       // …more authors
+     ],
+     "article_type":        "One of the predefined types, e.g. 'RESEARCH ARTICLE'",
+   }
+
+2. **references** – a list of reference objects, each with:
+   [
+     {
+       "text":             "Full reference text",
+       "citation_type":    "journal | book | web | thesis | conference",
+       "authors":          ["Author1", "Author2"],
+       "title":            "Title of cited work",
+       "year":             "Year of publication or null",
+       "journal":          "Journal or source or null",
+       "volume":           "Volume number or null",
+       "issue":            "Issue number or null",
+       "pages":            "Page range or null",
+       "doi":              "DOI of reference or null",
+       "url":              "Web URL if available or null",
+       "publisher":        "Publisher name or null",
+       "citation_position":"e.g. 'introduction', 'discussion' or null"
+     }
+     // …more references
+   ]
+EXTREMELY IMPORTANT - CITATION CONTINUITY ACROSS PAGES:
+            1. You MUST carefully check for citations that span across multiple pages or columns.
+            2. A citation is likely continuing from the previous page if:
+               - It starts without a citation number but is in the references section
+               - It starts mid-sentence or with lowercase letters
+               - It starts with "and" or other conjunctions
+               - It lacks author information but contains publication details
+               - The previous page ends with an incomplete citation
+            3. NEVER create two separate citations when one citation spans across pages.
+            4. ALWAYS join text that belongs to the same citation, even if it appears on different pages.
+            5. IMPORTANT EXAMPLE: If you see "19. Zeidan, F.Y.; San Andres, L. & Vance, J.M. Design and" at the bottom of one page and "application of squeeze film dampers in rotating machinery. Proceedings of the Twenty-Fifth Turbomachinery Symposium, 1996." at the top of the next page, this is ONE citation, not two.
+Use `null` for any missing scalar fields, and empty lists `[]` for missing arrays. The JSON output must be valid and parsable.
+The JSON object must be a single line without any newlines or indentation.
+The JSON object must be UTF-8 encoded. Do not include any other text, comments, or explanations in your response
+
+"""
             
             try:
                 # Process the PDF directly
