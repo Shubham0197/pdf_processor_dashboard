@@ -159,6 +159,22 @@
         .error-message.visible {
             display: block;
         }
+        
+        .json-actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .action-btn {
+            background-color: #27ae60;
+            font-size: 14px;
+            padding: 8px 15px;
+        }
+        
+        .action-btn:hover {
+            background-color: #219653;
+        }
     </style>
 </head>
 <body>
@@ -202,11 +218,85 @@
                 <div class="status" id="status">pending</div>
             </div>
             
+            <div class="json-actions">
+                <button id="copy-json-btn" class="action-btn">Copy JSON</button>
+                <button id="save-json-btn" class="action-btn">Save as JSON</button>
+            </div>
+            
             <div class="json-viewer" id="json-results"></div>
         </div>
     </div>
 
     <script>
+        // Function to get filename from URL
+        function getFilenameFromUrl(url) {
+            try {
+                // Find the portion after 'media' in the URL
+                const mediaIndex = url.indexOf('media');
+                let filename = 'document';
+                
+                if (mediaIndex !== -1) {
+                    // Get everything after 'media'
+                    const afterMedia = url.substring(mediaIndex + 5); // +5 to skip 'media'
+                    
+                    // Clean up the filename - remove query parameters, replace slashes
+                    filename = afterMedia.split('?')[0].trim();
+                    
+                    // Replace forward slashes with plus signs
+                    filename = filename.replace(/\//g, '+');
+                    
+                    // Remove any leading or trailing special characters
+                    filename = filename.replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, '');
+                    
+                    // Remove file extension if present
+                    filename = filename.split('.')[0];
+                }
+                
+                return filename || 'document';
+            } catch (e) {
+                console.error('Error extracting filename:', e);
+                return 'document';
+            }
+        }
+        
+        // Copy JSON to clipboard
+        document.getElementById('copy-json-btn').addEventListener('click', function() {
+            const jsonContent = document.getElementById('json-results').textContent;
+            if (jsonContent) {
+                navigator.clipboard.writeText(jsonContent)
+                    .then(() => {
+                        alert('JSON copied to clipboard!');
+                    })
+                    .catch(err => {
+                        alert('Error copying JSON: ' + err);
+                    });
+            } else {
+                alert('No JSON content to copy');
+            }
+        });
+        
+        // Save JSON to file
+        document.getElementById('save-json-btn').addEventListener('click', function() {
+            const jsonContent = document.getElementById('json-results').textContent;
+            const pdfUrl = document.getElementById('pdf-url').value.trim();
+            
+            if (jsonContent) {
+                const filename = getFilenameFromUrl(pdfUrl) + '.json';
+                const blob = new Blob([jsonContent], {type: 'application/json'});
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } else {
+                alert('No JSON content to save');
+            }
+        });
+        
         document.getElementById('process-btn').addEventListener('click', async function() {
             const pdfUrl = document.getElementById('pdf-url').value.trim();
             const errorMessage = document.getElementById('error-message');
