@@ -14,7 +14,12 @@
     <!-- Batch Overview Card -->
     <div class="card mb-4">
         <div class="card-header">
-            <h5 class="card-title mb-0">Batch Information</h5>
+            <h5 class="card-title mb-0">
+                Batch Information
+                {% if batch.request_data and batch.request_data.source == "single_pdf_processing" %}
+                <span class="badge bg-primary ms-2">Single PDF Processing</span>
+                {% endif %}
+            </h5>
         </div>
         <div class="card-body">
             <div class="row">
@@ -72,6 +77,20 @@
                                 {% endif %}
                             </td>
                         </tr>
+                        {% if batch.request_data and batch.request_data.source == "single_pdf_processing" and batch.request_data.file %}
+                        <tr>
+                            <th>Source:</th>
+                            <td>Process PDF page</td>
+                        </tr>
+                        <tr>
+                            <th>PDF URL:</th>
+                            <td>
+                                <a href="{{ batch.request_data.file }}" target="_blank" class="text-truncate d-inline-block" style="max-width: 300px;">
+                                    {{ batch.request_data.file }}
+                                </a>
+                            </td>
+                        </tr>
+                        {% endif %}
                     </table>
                 </div>
             </div>

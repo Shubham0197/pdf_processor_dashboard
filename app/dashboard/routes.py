@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Request, Depends, Form, HTTPException, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload, joinedload
 import os
 import json
 from datetime import datetime, timedelta
@@ -203,6 +204,21 @@ async def batches_page(
     )
     batches = batches_result.scalars().all()
     
+    # Identify single PDF processing jobs from their request_data
+    for batch in batches:
+        # Check if this is a single PDF processing job (from process-pdf page)
+        if batch.request_data and isinstance(batch.request_data, dict):
+            source = batch.request_data.get("source", "")
+            batch.is_single_pdf = (source == "single_pdf_processing")
+            
+            # Include the file name or URL for display in the UI
+            if batch.is_single_pdf and "file" in batch.request_data:
+                batch.pdf_url = batch.request_data.get("file", "")
+                # Get just the filename from the URL for display
+                batch.pdf_name = batch.pdf_url.split("/")[-1]
+        else:
+            batch.is_single_pdf = False
+    
     # Calculate pagination info
     total_pages = (total + limit - 1) // limit
     
@@ -234,6 +250,18 @@ async def batch_detail(
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
     
+    # Check if this is a single PDF processing job
+    if batch.request_data and isinstance(batch.request_data, dict):
+        source = batch.request_data.get("source", "")
+        batch.is_single_pdf = (source == "single_pdf_processing")
+        
+        # Include the file name or URL for display in the UI
+        if batch.is_single_pdf and "file" in batch.request_data:
+            batch.pdf_url = batch.request_data.get("file", "")
+            batch.pdf_name = batch.pdf_url.split("/")[-1]
+    else:
+        batch.is_single_pdf = False
+    
     # Get jobs for this batch
     jobs_result = await db.execute(
         select(ProcessingJob).where(ProcessingJob.batch_id == batch.id)
@@ -259,12 +287,66 @@ async def job_detail(
     current_user: User = Depends(get_current_user_from_cookie)
 ):
     """Job detail page"""
-    # Get job
-    job_result = await db.execute(select(ProcessingJob).where(ProcessingJob.job_id == job_id))
+    # Get job with batch relationship eagerly loaded
+    job_result = await db.execute(
+        select(ProcessingJob)
+        .options(joinedload(ProcessingJob.batch))
+        .where(ProcessingJob.job_id == job_id)
+    )
     job = job_result.scalars().first()
     
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+    
+    # Helper function to make dictionaries JSON serializable
+    def make_serializable(obj):
+        if isinstance(obj, dict):
+            # Create a new dict with string keys
+            result = {}
+            for k, v in obj.items():
+                # Convert any non-string keys to strings
+                if not isinstance(k, (str, int, float, bool, type(None))):
+                    k = str(k)
+                # Recursively convert values
+                result[k] = make_serializable(v)
+            return result
+        elif isinstance(obj, list):
+            # Convert list items
+            return [make_serializable(item) for item in obj]
+        elif hasattr(obj, '__dict__'):
+            # Convert object to dict if it has __dict__
+            return make_serializable(obj.__dict__)
+        elif hasattr(obj, 'dict'):  # For Pydantic models
+            return make_serializable(obj.dict())
+        else:
+            # Return primitives as is
+            return obj
+    
+    # Handle serialization of metadata, references, and other fields
+    if hasattr(job, 'metadata') and job.metadata:
+        try:
+            job.metadata = make_serializable(job.metadata)
+        except Exception as e:
+            job.metadata = {"error": f"Could not serialize metadata: {str(e)}"}
+    
+    # Similarly handle references, which could also be objects
+    if hasattr(job, 'references') and job.references:
+        try:
+            job.references = make_serializable(job.references)
+        except Exception as e:
+            job.references = {"error": f"Could not serialize references: {str(e)}"}
+            
+    # Handle webhook response serialization as well
+    if hasattr(job, 'webhook_response') and job.webhook_response:
+        try:
+            job.webhook_response = make_serializable(job.webhook_response)
+        except Exception as e:
+            job.webhook_response = {"error": f"Could not serialize webhook response: {str(e)}"}
+    
+    # If we have a batch, prepare batch info for display
+    if job.batch:
+        # Make sure batch_id is available for template
+        batch_id = job.batch.batch_id
     
     return templates.TemplateResponse(
         "dashboard/job_detail.html",

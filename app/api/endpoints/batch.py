@@ -150,8 +150,7 @@ async def create_batch_job(
 @router.get("/{batch_id}/status", response_model=BatchStatusResponse)
 async def get_batch_status(
     batch_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Get status of a batch job

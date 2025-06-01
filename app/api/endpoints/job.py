@@ -3,9 +3,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from datetime import datetime
 import re
+import uuid
 
 from app.database import get_db
 from app.models.job import ProcessingJob
+from app.models.batch import BatchJob
 from app.schemas.job import JobCreate, JobResponse, JobResult
 from app.services.pdf_service import process_pdf
 from app.services.webhook_service import send_job_webhook
@@ -86,6 +88,33 @@ async def create_job(
     """
     Create a new job to process a single PDF file
     """
+    # Check if this is a standalone job (not part of an existing batch)
+    # If so, create a new batch for tracking purposes
+    batch = None
+    if job.batch_id is None:
+        # Create a new batch job for single PDF processing
+        batch = BatchJob(
+            batch_id=str(uuid.uuid4()),
+            total_files=1,
+            status="pending",
+            request_data={
+                "source": "single_pdf_processing",
+                "options": {
+                    "extract_metadata": True,
+                    "extract_references": True,
+                    "extract_full_text": False,
+                    "complete_references": job.complete_references
+                },
+                "file": job.file_url
+            }
+        )
+        db.add(batch)
+        await db.commit()
+        await db.refresh(batch)
+        
+        # Set the batch_id for this job
+        job.batch_id = batch.id
+    
     # Create job
     db_job = ProcessingJob(
         file_url=job.file_url,
@@ -103,6 +132,14 @@ async def create_job(
     try:
         # Update job status
         db_job.status = "processing"
+        
+        # Update batch status if this job is part of a batch
+        if db_job.batch_id:
+            batch_result = await db.execute(select(BatchJob).where(BatchJob.id == db_job.batch_id))
+            batch = batch_result.scalars().first()
+            if batch and batch.status == "pending":
+                batch.status = "processing"
+                
         await db.commit()
         
         # Process the PDF
@@ -167,11 +204,37 @@ async def create_job(
                 db_job.extracted_text = None
                 db_job.processing_time = result.get("processing_time")
                 db_job.completed_at = datetime.now()
+                
+                # Update batch status if this is associated with a batch
+                if db_job.batch_id:
+                    # Get the batch
+                    batch_result = await db.execute(select(BatchJob).where(BatchJob.id == db_job.batch_id))
+                    batch = batch_result.scalars().first()
+                    if batch:
+                        batch.processed_files += 1
+                        # If all files are processed, mark batch as completed
+                        if batch.processed_files + batch.failed_files >= batch.total_files:
+                            batch.status = "completed"
+                            batch.completed_at = datetime.now()
+                        await db.commit()
             
         except Exception as e:
             db_job.status = "failed"
             db_job.error_message = str(e)
             db_job.completed_at = datetime.now()
+            
+            # Update batch status for failed job
+            if db_job.batch_id:
+                # Get the batch
+                batch_result = await db.execute(select(BatchJob).where(BatchJob.id == db_job.batch_id))
+                batch = batch_result.scalars().first()
+                if batch:
+                    batch.failed_files += 1
+                    # If all files are processed, mark batch as completed
+                    if batch.processed_files + batch.failed_files >= batch.total_files:
+                        batch.status = "completed"
+                        batch.completed_at = datetime.now()
+                    await db.commit()
         
         await db.commit()
         
@@ -179,6 +242,19 @@ async def create_job(
         print(f"Error processing job {db_job.id}: {e}")
         db_job.status = "failed"
         db_job.error_message = str(e)
+        
+        # Update batch with failure status
+        if db_job.batch_id:
+            # Get the batch
+            batch_result = await db.execute(select(BatchJob).where(BatchJob.id == db_job.batch_id))
+            batch = batch_result.scalars().first()
+            if batch:
+                batch.failed_files += 1
+                # If all files are processed, mark batch as completed
+                if batch.processed_files + batch.failed_files >= batch.total_files:
+                    batch.status = "completed"
+                    batch.completed_at = datetime.now()
+                
         await db.commit()
     
     # Return a simplified response to avoid ORM issues

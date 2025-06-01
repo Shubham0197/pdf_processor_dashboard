@@ -175,6 +175,14 @@
         .action-btn:hover {
             background-color: #219653;
         }
+        
+        #view-batch-btn {
+            background-color: #3498db;
+        }
+        
+        #view-batch-btn:hover {
+            background-color: #2980b9;
+        }
     </style>
 </head>
 <body>
@@ -217,10 +225,10 @@
                 <div class="results-title">Processing Results</div>
                 <div class="status" id="status">pending</div>
             </div>
-            
             <div class="json-actions">
                 <button id="copy-json-btn" class="action-btn">Copy JSON</button>
                 <button id="save-json-btn" class="action-btn">Save as JSON</button>
+                <button id="view-batch-btn" class="action-btn" style="display: none;">View in Dashboard</button>
             </div>
             
             <div class="json-viewer" id="json-results"></div>
@@ -369,6 +377,9 @@
             }
             
             try {
+                // Reset the view batch button
+                document.getElementById('view-batch-btn').style.display = 'none';
+                
                 // Show loading
                 loading.classList.add('visible');
                 
@@ -392,6 +403,10 @@
                 
                 const jobData = await response.json();
                 const jobId = jobData.job_id;
+                const batchId = jobData.batch_id;
+                
+                // Store batch ID for reference
+                let batchTrackingId = '';
                 
                 // Poll for job status
                 let completed = false;
@@ -426,12 +441,39 @@
                         
                         // Show results
                         if (statusData.status === 'completed') {
-                            // Format and display the JSON results
+                            // Get batch information if available
+                            let batchInfo = '';
+                            if (batchId) {
+                                try {
+                                    const batchResponse = await fetch(`/api/v1/batch/${batchId}/status`, {
+                                        method: 'GET',
+                                        headers: {
+                                            'Accept': 'application/json'
+                                        }
+                                    });
+                                    
+                                    if (batchResponse.ok) {
+                                        const batchData = await batchResponse.json();
+                                        batchTrackingId = batchData.batch_id;
+                                        batchInfo = `\n\n// Batch Information\n{
+  "batch_id": "${batchData.batch_id}",
+  "status": "${batchData.status}",
+  "processed_files": ${batchData.processed_files},
+  "total_files": ${batchData.total_files},
+  "view_batch_url": "/dashboard/batch/${batchData.batch_id}"
+}`;
+                                    }
+                                } catch (batchError) {
+                                    console.error('Failed to fetch batch data:', batchError);
+                                }
+                            }
+                            
+                            // Format and display the JSON results along with batch info
                             const formattedJson = JSON.stringify({
                                 extracted_text: statusData.extracted_text,
                                 metadata: statusData.doc_metadata,
                                 references: statusData.references
-                            }, null, 2);
+                            }, null, 2) + batchInfo;
                             
                             jsonResults.textContent = formattedJson;
                         } else {
@@ -439,6 +481,15 @@
                         }
                         
                         resultsContainer.classList.add('visible');
+                        
+                        // Show batch view button if we have a batch ID
+                        if (batchTrackingId) {
+                            const viewBatchBtn = document.getElementById('view-batch-btn');
+                            viewBatchBtn.style.display = 'inline-block';
+                            viewBatchBtn.onclick = function() {
+                                window.location.href = `/dashboard/batch/${batchTrackingId}`;
+                            };
+                        }
                     }
                     
                     attempts++;

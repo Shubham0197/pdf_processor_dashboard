@@ -24,13 +24,23 @@
                     <tbody>
                         {% for batch in batches %}
                         <tr>
-                            <td>{{ batch.batch_id }}</td>
+                            <td>
+                                {{ batch.batch_id }}
+                                {% if batch.is_single_pdf %}
+                                <span class="badge bg-primary ms-1" title="Single PDF processing from web interface">Single</span>
+                                {% endif %}
+                            </td>
                             <td>
                                 <span class="badge bg-{{ 'warning' if batch.status == 'pending' else 'info' if batch.status == 'processing' else 'success' if batch.status == 'completed' else 'danger' }}">
                                     {{ batch.status }}
                                 </span>
                             </td>
-                            <td>{{ batch.processed_files }} / {{ batch.total_files }}</td>
+                            <td>
+                                {{ batch.processed_files }} / {{ batch.total_files }}
+                                {% if batch.is_single_pdf and batch.pdf_name %}
+                                <small class="d-block text-muted">{{ batch.pdf_name }}</small>
+                                {% endif %}
+                            </td>
                             <td>{{ batch.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
                             <td>
                                 {% if batch.completed_at %}
