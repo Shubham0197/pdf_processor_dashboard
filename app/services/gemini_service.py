@@ -89,8 +89,8 @@ For authors, use an array of objects with the following properties (if available
 - "email"
 - "mobile_no"
 - "designation" (job title or role, e.g., "Project Assistant-II", "Professor", "Research Scholar")
-- "institution" (name of the institution only, e.g., "CSIR - National Environmental Engineering Research Institute")
-- parent_institution (if applicable, e.g., "CSIR")
+- "institution" (name of the institution only, e.g., "CSIR - National Environmental Engineering Research Institute" or e.g., "Madras Institute of Technology")
+- "parent_institution" (The parent or umbrella institution/university, if present (e.g., "Anna University" for "Madras Institute of Technology, Anna University").)
 - "orcid_id"
 - "department" (store the department verbatim as it appears, e.g., "Department of Technology")
 - "address" (city, state, country of the institution)
@@ -155,31 +155,61 @@ IMPORTANT: If you cannot extract some information, use null or empty arrays as a
         # Extract references if requested
         if extract_references:
             references_prompt = """
-Extract all references/citations from this academic article.
-For each reference, provide the following information in a structured format:
+            Extract all references/citations from this academic article.
+            For each reference, provide the following information in a structured format:
+            
+            1. Full reference text (exactly as it appears in the document as key "text")
+            2. Citation type (journal article, book, conference paper, website/URL, etc.)
+            3. Authors (list of all authors)
+            4. Title of the referenced work
+            5. Year of publication
+            6. Journal name (if it's a journal article)
+            7. Conference name (if it's a conference proceeding)
+            8. Volume and issue numbers (if applicable)
+            9. Page numbers (if available)
+            10. DOI (if available)
+            11. URL (if it's a web resource)
+            12. Publisher (if it's a book)
+            13. Citation position (e.g., reference number in the bibliography)
+            
+            IMPORTANT: If you don't find any references in the text, look carefully for numbered citations, bracketed citations, or any list of sources at the end of the document. References might be formatted in various ways.
 
-1. Full reference text (exactly as it appears in the document)
-2. Citation type (journal, proceedings, book, website/URL, etc.)
-3. Authors (list of all authors)
-4. Title of the referenced work
-5. Year of publication
-6. Journal name (if it's a journal article)
-7. Conference name (if it's a conference proceeding)
-8. Volume and issue numbers (if applicable)
-9. Page numbers (if available)
-10. DOI (if available)
-11. URL (if it's a web resource)
-12. Publisher (if it's a book)
-13. Citation position (e.g., reference number in the bibliography)
-
-IMPORTANT:
-- If the reference is a journal article, set "citation_type" to "journal" and fill the "journal" field with the journal name. Leave "conference" empty or null.
-- If the reference is a conference proceeding, set "citation_type" to "proceedings" and fill the "conference" field with the conference name. Leave "journal" empty or null.
-- For other types, use the appropriate "citation_type" and fill only the relevant fields.
-
-Return the information in a structured JSON format as an array of reference objects.
-If you absolutely cannot find any references, return an empty array but explain why in a comment.
-"""
+            IMPORTANT:
+            - If the reference is a journal article, set "citation_type" to "journal" and fill the "journal" field with the journal name. Leave "conference" empty or null.
+            - If the reference is a conference proceeding, set "citation_type" to "conference proceedings" and fill the "conference" field with the conference name. Leave "journal" empty or null.
+            - For other types, use the appropriate "citation_type" and fill only the relevant fields.
+            
+            EXTREMELY IMPORTANT - CITATION CONTINUITY ACROSS PAGES:
+            1. You MUST carefully check for citations that span across multiple pages or columns.
+            2. A citation is likely continuing from the previous page if:
+               - It starts without a citation number but is in the references section
+               - It starts mid-sentence or with lowercase letters
+               - It starts with "and" or other conjunctions
+               - It lacks author information but contains publication details
+               - The previous page ends with an incomplete citation
+            3. NEVER create two separate citations when one citation spans across pages.
+            4. ALWAYS join text that belongs to the same citation, even if it appears on different pages.
+            5. IMPORTANT EXAMPLE: If you see "19. Zeidan, F.Y.; San Andres, L. & Vance, J.M. Design and" at the bottom of one page and "application of squeeze film dampers in rotating machinery. Proceedings of the Twenty-Fifth Turbomachinery Symposium, 1996." at the top of the next page, this is ONE citation, not two.
+            
+            
+            For example, for the reference "1. Akram, f., O. Ilyas and B. A. K. Prusty (2015). International Journal of Engineering Technology Science and Research 2(10): 1-11. /n doi: 10.14429/dsj.60.57", provide:
+            - text: "1. Akram, f., O. Ilyas and B. A. K. Prusty (2015). International Journal of Engineering Technology Science and Research 2(10): 1-11."
+            - citation_type: "journal article"
+            - authors: ["Akram, F.", "Ilyas, O.", "Prusty, B.A.K."]
+            - title: (extract if present)
+            - year: "2015"
+            - journal: "International Journal of Engineering Technology Science and Research"
+            - volume: "2"
+            - issue: "10"
+            - pages: "1-11"
+            - doi: "10.14429/dsj.60.57"
+            - url: (extract if present)
+            - publisher: (extract if present)
+            - citation_position: "1"
+            
+            Return the information in a structured JSON format as an array of reference objects.
+            If you absolutely cannot find any references, return an empty array but explain why in a comment.
+            """
             
             try:
                 # Process the PDF directly
@@ -205,32 +235,61 @@ If you absolutely cannot find any references, return an empty array but explain 
                         
                         # Initial request for references
                         initial_prompt = """
-                        Extract all references/citations from this academic article.
-                        
-                        IMPORTANT: If there are many references, indicate how many references you found in total at the beginning of your response.
-                        For example: "Found 87 references in total."
-                        
-                        Then extract the first 25 references with details. For each reference, provide:
-                        1. Full reference text (exactly as it appears in the document)
-                        2. Citation type (journal, proceedings, book, website/URL, etc.)
-                        3. Authors (list of all authors)
-                        4. Title of the referenced work
-                        5. Year of publication
-                        6. Journal name (if it's a journal article)
-                        7. Conference name (if it's a conference proceeding)
-                        8. Volume and issue numbers (if applicable)
-                        9. Page numbers (if available)
-                        10. DOI (if available)
-                        11. URL (if it's a web resource)
-                        12. Publisher (if it's a book)
-                        13. Citation position (e.g., reference number in the bibliography)
-                        
-                        Return the information in a structured JSON format as an array of reference objects.
-                        Also include a field 'total_references' with the total number found, and 'extracted_count' with the number you've extracted in this response.
-                        If more references exist than what you've extracted, include 'has_more' field set to true.
-                        
-                        IMPORTANT: Look carefully through the entire document for numbered citations, bracketed citations, or lists of sources at the end of the document.
-                        """
+            Extract all references/citations from this academic article.
+            For each reference, provide the following information in a structured format:
+            
+            1. Full reference text (exactly as it appears in the document as key "text")
+            2. Citation type (journal article, book, conference paper, website/URL, etc.)
+            3. Authors (list of all authors)
+            4. Title of the referenced work
+            5. Year of publication
+            6. Journal name (if it's a journal article)
+            7. Conference name (if it's a conference proceeding)
+            8. Volume and issue numbers (if applicable)
+            9. Page numbers (if available)
+            10. DOI (if available)
+            11. URL (if it's a web resource)
+            12. Publisher (if it's a book)
+            13. Citation position (e.g., reference number in the bibliography)
+            
+            IMPORTANT: If you don't find any references in the text, look carefully for numbered citations, bracketed citations, or any list of sources at the end of the document. References might be formatted in various ways.
+
+            IMPORTANT:
+            - If the reference is a journal article, set "citation_type" to "journal" and fill the "journal" field with the journal name. Leave "conference" empty or null.
+            - If the reference is a conference proceeding, set "citation_type" to "conference proceedings" and fill the "conference" field with the conference name. Leave "journal" empty or null.
+            - For other types, use the appropriate "citation_type" and fill only the relevant fields.
+            
+            EXTREMELY IMPORTANT - CITATION CONTINUITY ACROSS PAGES:
+            1. You MUST carefully check for citations that span across multiple pages or columns.
+            2. A citation is likely continuing from the previous page if:
+               - It starts without a citation number but is in the references section
+               - It starts mid-sentence or with lowercase letters
+               - It starts with "and" or other conjunctions
+               - It lacks author information but contains publication details
+               - The previous page ends with an incomplete citation
+            3. NEVER create two separate citations when one citation spans across pages.
+            4. ALWAYS join text that belongs to the same citation, even if it appears on different pages.
+            5. IMPORTANT EXAMPLE: If you see "19. Zeidan, F.Y.; San Andres, L. & Vance, J.M. Design and" at the bottom of one page and "application of squeeze film dampers in rotating machinery. Proceedings of the Twenty-Fifth Turbomachinery Symposium, 1996." at the top of the next page, this is ONE citation, not two.
+            
+            
+            For example, for the reference "1. Akram, f., O. Ilyas and B. A. K. Prusty (2015). International Journal of Engineering Technology Science and Research 2(10): 1-11. /n doi: 10.14429/dsj.60.57", provide:
+            - text: "1. Akram, f., O. Ilyas and B. A. K. Prusty (2015). International Journal of Engineering Technology Science and Research 2(10): 1-11."
+            - citation_type: "journal article"
+            - authors: ["Akram, F.", "Ilyas, O.", "Prusty, B.A.K."]
+            - title: (extract if present)
+            - year: "2015"
+            - journal: "International Journal of Engineering Technology Science and Research"
+            - volume: "2"
+            - issue: "10"
+            - pages: "1-11"
+            - doi: "10.14429/dsj.60.57"
+            - url: (extract if present)
+            - publisher: (extract if present)
+            - citation_position: "1"
+            
+            Return the information in a structured JSON format as an array of reference objects.
+            If you absolutely cannot find any references, return an empty array but explain why in a comment.
+            """
                         
                         contents = [
                             types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
