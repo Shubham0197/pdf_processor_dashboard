@@ -68,48 +68,53 @@ async def process_pdf_directly(pdf_path: str, db: AsyncSession, extract_metadata
         # Extract metadata if requested
         if extract_metadata:
             metadata_prompt = """
-        Extract the following metadata from this academic article:
-        - Title
-        - Authors (with detailed information)
-        - Abstract
-        - Keywords
-        - Journal name
-        - Volume and issue numbers
-        - Year of publication
-        - DOI
-        - Pages
-        
-        Return the information in a structured JSON format with these exact keys:
-        "title", "authors", "abstract", "keywords", "journal", "volume", "issue", "year", "doi", "pages"
-        
-        For authors, use an array of objects with the following properties (if available):
-        - "name" (full name)
-        - "first_name"
-        - "last_name"
-        - "email"
-        - "mobile_no"
-        - "designation" (job title or role, e.g., "Project Assistant-II", "Professor", "Research Scholar")
-        - "institution" (name of the institution only, e.g., "CSIR - National Environmental Engineering Research Institute")
-        - "orcid_id"
-        - "department"
-        - "address" (city, state, country of the institution)
-        - "affiliation" (affiliation of the author)
-        - "city"
-        - "state"
-        - "country"
-        - "pincode"
-        
-        IMPORTANT: Separate the designation from the institution name. For example, if the affiliation is "Project Assistant-II, CSIR - National Environmental Engineering Research Institute, Nagpur-440020 (India)", then:
-        - designation = "Project Assistant-II"
-        - institution = "CSIR - National Environmental Engineering Research Institute"
-        - address = "Nagpur-440020, India"
-        - city = "Nagpur"
-        - state = "Maharashtra"
-        - country = "India"
-        - pincode = "440020"
-        
-        IMPORTANT: If you cannot extract some information, use null or empty arrays as appropriate. Always return valid JSON.
-            """
+Extract the following metadata from this academic article:
+- Title
+- Authors (with detailed information)
+- Abstract
+- Keywords
+- Journal name
+- Volume and issue numbers
+- Year of publication
+- DOI
+- Pages
+
+Return the information in a structured JSON format with these exact keys:
+"title", "authors", "abstract", "keywords", "journal", "volume", "issue", "year", "doi", "pages"
+
+For authors, use an array of objects with the following properties (if available):
+- "name" (full name)
+- "first_name" (include middle name here if present, e.g., for 'John Michael Smith', first_name = 'John Michael')
+- "last_name"
+- "email"
+- "mobile_no"
+- "designation" (job title or role, e.g., "Project Assistant-II", "Professor", "Research Scholar")
+- "institution" (name of the institution only, e.g., "CSIR - National Environmental Engineering Research Institute")
+- parent_institution (if applicable, e.g., "CSIR")
+- "orcid_id"
+- "department" (store the department verbatim as it appears, e.g., "Department of Technology")
+- "address" (city, state, country of the institution)
+- "affiliation" (affiliation of the author)
+- "city"
+- "state"
+- "country"
+- "pincode"
+
+IMPORTANT: 
+- If an author has a middle name, include it in the "first_name" field along with the first name.
+- For the "department" field, always store the department name exactly as it appears in the article, without splitting or abbreviating (e.g., "Department of Technology" should be stored as "Department of Technology").
+
+IMPORTANT: Separate the designation from the institution name. For example, if the affiliation is "Project Assistant-II, CSIR - National Environmental Engineering Research Institute, Nagpur-440020 (India)", then:
+- designation = "Project Assistant-II"
+- institution = "CSIR - National Environmental Engineering Research Institute"
+- address = "Nagpur-440020, India"
+- city = "Nagpur"
+- state = "Maharashtra"
+- country = "India"
+- pincode = "440020"
+
+IMPORTANT: If you cannot extract some information, use null or empty arrays as appropriate. Always return valid JSON.
+"""
             
             try:
                 # Process the PDF directly
@@ -150,55 +155,31 @@ async def process_pdf_directly(pdf_path: str, db: AsyncSession, extract_metadata
         # Extract references if requested
         if extract_references:
             references_prompt = """
-            Extract all references/citations from this academic article.
-            For each reference, provide the following information in a structured format:
-            
-            1. Full reference text (exactly as it appears in the document)
-            2. Citation type (journal article, book, conference paper, website/URL, etc.)
-            3. Authors (list of all authors)
-            4. Title of the referenced work
-            5. Year of publication
-            6. Journal name (if it's a journal article)
-            7. Volume and issue numbers (if applicable)
-            8. Page numbers (if available)
-            9. DOI (if available)
-            10. URL (if it's a web resource)
-            11. Publisher (if it's a book)
-            12. Citation position (e.g., reference number in the bibliography)
-            
-            IMPORTANT: If you don't find any references in the text, look carefully for numbered citations, bracketed citations, or any list of sources at the end of the document. References might be formatted in various ways.
-            
-            EXTREMELY IMPORTANT - CITATION CONTINUITY ACROSS PAGES:
-            1. You MUST carefully check for citations that span across multiple pages or columns.
-            2. A citation is likely continuing from the previous page if:
-               - It starts without a citation number but is in the references section
-               - It starts mid-sentence or with lowercase letters
-               - It starts with "and" or other conjunctions
-               - It lacks author information but contains publication details
-               - The previous page ends with an incomplete citation
-            3. NEVER create two separate citations when one citation spans across pages.
-            4. ALWAYS join text that belongs to the same citation, even if it appears on different pages.
-            5. IMPORTANT EXAMPLE: If you see "19. Zeidan, F.Y.; San Andres, L. & Vance, J.M. Design and" at the bottom of one page and "application of squeeze film dampers in rotating machinery. Proceedings of the Twenty-Fifth Turbomachinery Symposium, 1996." at the top of the next page, this is ONE citation, not two.
-            
-            
-            For example, for the reference "1. Akram, f., O. Ilyas and B. A. K. Prusty (2015). International Journal of Engineering Technology Science and Research 2(10): 1-11. /n doi: 10.14429/dsj.60.57", provide:
-            - text: "1. Akram, f., O. Ilyas and B. A. K. Prusty (2015). International Journal of Engineering Technology Science and Research 2(10): 1-11."
-            - citation_type: "journal article"
-            - authors: ["Akram, F.", "Ilyas, O.", "Prusty, B.A.K."]
-            - title: (extract if present)
-            - year: "2015"
-            - journal: "International Journal of Engineering Technology Science and Research"
-            - volume: "2"
-            - issue: "10"
-            - pages: "1-11"
-            - doi: "10.14429/dsj.60.57"
-            - url: (extract if present)
-            - publisher: (extract if present)
-            - citation_position: "1"
-            
-            Return the information in a structured JSON format as an array of reference objects.
-            If you absolutely cannot find any references, return an empty array but explain why in a comment.
-            """
+Extract all references/citations from this academic article.
+For each reference, provide the following information in a structured format:
+
+1. Full reference text (exactly as it appears in the document)
+2. Citation type (journal, proceedings, book, website/URL, etc.)
+3. Authors (list of all authors)
+4. Title of the referenced work
+5. Year of publication
+6. Journal name (if it's a journal article)
+7. Conference name (if it's a conference proceeding)
+8. Volume and issue numbers (if applicable)
+9. Page numbers (if available)
+10. DOI (if available)
+11. URL (if it's a web resource)
+12. Publisher (if it's a book)
+13. Citation position (e.g., reference number in the bibliography)
+
+IMPORTANT:
+- If the reference is a journal article, set "citation_type" to "journal" and fill the "journal" field with the journal name. Leave "conference" empty or null.
+- If the reference is a conference proceeding, set "citation_type" to "proceedings" and fill the "conference" field with the conference name. Leave "journal" empty or null.
+- For other types, use the appropriate "citation_type" and fill only the relevant fields.
+
+Return the information in a structured JSON format as an array of reference objects.
+If you absolutely cannot find any references, return an empty array but explain why in a comment.
+"""
             
             try:
                 # Process the PDF directly
@@ -231,17 +212,18 @@ async def process_pdf_directly(pdf_path: str, db: AsyncSession, extract_metadata
                         
                         Then extract the first 25 references with details. For each reference, provide:
                         1. Full reference text (exactly as it appears in the document)
-                        2. Citation type (journal article, book, conference paper, website/URL, etc.)
+                        2. Citation type (journal, proceedings, book, website/URL, etc.)
                         3. Authors (list of all authors)
                         4. Title of the referenced work
                         5. Year of publication
                         6. Journal name (if it's a journal article)
-                        7. Volume and issue numbers (if applicable)
-                        8. Page numbers (if available)
-                        9. DOI (if available)
-                        10. URL (if it's a web resource)
-                        11. Publisher (if it's a book)
-                        12. Citation position (e.g., reference number in the bibliography)
+                        7. Conference name (if it's a conference proceeding)
+                        8. Volume and issue numbers (if applicable)
+                        9. Page numbers (if available)
+                        10. DOI (if available)
+                        11. URL (if it's a web resource)
+                        12. Publisher (if it's a book)
+                        13. Citation position (e.g., reference number in the bibliography)
                         
                         Return the information in a structured JSON format as an array of reference objects.
                         Also include a field 'total_references' with the total number found, and 'extracted_count' with the number you've extracted in this response.
@@ -333,17 +315,18 @@ async def process_pdf_directly(pdf_path: str, db: AsyncSession, extract_metadata
                             Please continue from reference #{current_count + 1} and extract exactly 25 more references.
                             Use the same format as before, providing the following for each reference:
                             1. Full reference text (exactly as it appears in the document)
-                            2. Citation type (journal article, book, conference paper, website/URL, etc.)
+                            2. Citation type (journal, proceedings, book, website/URL, etc.)
                             3. Authors (list of all authors)
                             4. Title of the referenced work
                             5. Year of publication
                             6. Journal name (if it's a journal article)
-                            7. Volume and issue numbers (if applicable)
-                            8. Page numbers (if available)
-                            9. DOI (if available)
-                            10. URL (if it's a web resource)
-                            11. Publisher (if it's a book)
-                            12. Citation position (e.g., reference number in the bibliography)
+                            7. Conference name (if it's a conference proceeding)
+                            8. Volume and issue numbers (if applicable)
+                            9. Page numbers (if available)
+                            10. DOI (if available)
+                            11. URL (if it's a web resource)
+                            12. Publisher (if it's a book)
+                            13. Citation position (e.g., reference number in the bibliography)
                             
                             Return ONLY the array of reference objects in JSON format, without any introduction or explanation.
                             If there are no more references to extract, return an empty array [].
@@ -878,17 +861,18 @@ async def extract_references_with_gemini(pdf_text: str, db: AsyncSession):
         For each reference, provide the following information in a structured format:
         
         1. Full reference text (exactly as it appears in the document)
-        2. Citation type (journal article, book, conference paper, website/URL, etc.)
+        2. Citation type (journal, proceedings, book, website/URL, etc.)
         3. Authors (list of all authors)
         4. Title of the referenced work
         5. Year of publication
         6. Journal name (if it's a journal article)
-        7. Volume and issue numbers (if applicable)
-        8. Page numbers (if available)
-        9. DOI (if available)
-        10. URL (if it's a web resource)
-        11. Publisher (if it's a book)
-        12. Citation position (e.g., reference number in the bibliography)
+        7. Conference name (if it's a conference proceeding)
+        8. Volume and issue numbers (if applicable)
+        9. Page numbers (if available)
+        10. DOI (if available)
+        11. URL (if it's a web resource)
+        12. Publisher (if it's a book)
+        13. Citation position (e.g., reference number in the bibliography)
         
         IMPORTANT: If you don't find any references in the text, look carefully for numbered citations, bracketed citations, or any list of sources at the end of the document. References might be formatted in various ways.
         
