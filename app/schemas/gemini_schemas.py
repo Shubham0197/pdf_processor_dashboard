@@ -11,6 +11,7 @@ class Author(BaseModel):
     mobile_no: Optional[str] = None
     designation: Optional[str] = None
     institution: Optional[str] = None
+    parent_institution: Optional[str] = None
     department: Optional[str] = None
     orcid_id: Optional[str] = None
     address: Optional[str] = None
@@ -66,6 +67,7 @@ class Reference(BaseModel):
     title: Optional[str] = None
     year: Optional[Union[str, int]] = None  # Allow both string and integer
     journal: Optional[str] = None
+    conference: Optional[str] = None
     volume: Optional[Union[str, int]] = None  # Allow both string and integer
     issue: Optional[Union[str, int]] = None  # Allow both string and integer
     pages: Optional[str] = None
