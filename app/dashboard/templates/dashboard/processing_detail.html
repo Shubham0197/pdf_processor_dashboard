@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+
+{% block title %}Processing Results{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Processing Request Information -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card mb-4">
+                <div class="card-header pb-0 d-flex justify-content-between align-items-center">
+                    <h6>Processing Request Information</h6>
+                    <div>
+                        <a href="/dashboard/documents/{{ processing_request.document_id }}" class="btn btn-sm btn-outline-secondary">
+                            <i class="fas fa-arrow-left me-1"></i> Back to Document
+                        </a>
+                        {% if processing_request.batch_id %}
+                        <a href="/dashboard/batches/{{ processing_request.batch_id }}" class="btn btn-sm btn-outline-primary ms-2">
+                            <i class="fas fa-layer-group me-1"></i> View Batch
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <h6 class="text-uppercase text-muted mb-2">Request ID</h6>
+                                <p>{{ processing_request.id }}</p>
+                            </div>
+                            <div class="mb-3">
+                                <h6 class="text-uppercase text-muted mb-2">Document ID</h6>
+                                <p>
+                                    <a href="/dashboard/documents/{{ processing_request.document_id }}">
+                                        {{ processing_request.document_id }}
+                                    </a>
+                                </p>
+                            </div>
+                            <div class="mb-3">
+                                <h6 class="text-uppercase text-muted mb-2">Request Type</h6>
+                                <p>
+                                    <span class="badge {% if processing_request.request_type == 'single' %}bg-info{% else %}bg-warning{% endif %}">
+                                        {{ processing_request.request_type }}
+                                    </span>
+                                </p>
+                            </div>
+                            <div class="mb-3">
+                                <h6 class="text-uppercase text-muted mb-2">Status</h6>
+                                <p>
+                                    <span class="badge {% if processing_request.status == 'completed' %}bg-success{% elif processing_request.status == 'processing' %}bg-info{% elif processing_request.status == 'failed' %}bg-danger{% else %}bg-secondary{% endif %}">
+                                        {{ processing_request.status }}
+                                    </span>
+                                </p>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <h6 class="text-uppercase text-muted mb-2">Created At</h6>
+                                <p>{{ processing_request.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+                            </div>
+                            <div class="mb-3">
+                                <h6 class="text-uppercase text-muted mb-2">Started At</h6>
+                                <p>{{ processing_request.started_at.strftime('%Y-%m-%d %H:%M:%S') if processing_request.started_at else 'Not started' }}</p>
+                            </div>
+                            <div class="mb-3">
+                                <h6 class="text-uppercase text-muted mb-2">Completed At</h6>
+                                <p>{{ processing_request.completed_at.strftime('%Y-%m-%d %H:%M:%S') if processing_request.completed_at else 'Not completed' }}</p>
+                            </div>
+                            <div class="mb-3">
+                                <h6 class="text-uppercase text-muted mb-2">Processing Duration</h6>
+                                <p>
+                                    {% if processing_request.started_at and processing_request.completed_at %}
+                                    {{ (processing_request.completed_at - processing_request.started_at).total_seconds() | round(2) }} seconds
+                                    {% else %}
+                                    N/A
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Processing Results -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card mb-4">
+                <div class="card-header pb-0">
+                    <h6>Processing Results</h6>
+                </div>
+                <div class="card-body">
+                    <ul class="nav nav-tabs" id="resultsTabs" role="tablist">
+                        {% for result in processing_results %}
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link {% if loop.first %}active{% endif %}" 
+                                    id="{{ result.processing_type }}-tab" 
+                                    data-bs-toggle="tab" 
+                                    data-bs-target="#{{ result.processing_type }}" 
+                                    type="button" 
+                                    role="tab">
+                                {{ result.processing_type | title }}
+                                <span class="badge {% if result.status == 'completed' %}bg-success{% elif result.status == 'failed' %}bg-danger{% else %}bg-secondary{% endif %} ms-1">
+                                    {{ result.status }}
+                                </span>
+                            </button>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    <div class="tab-content p-3 border border-top-0 rounded-bottom" id="resultsTabsContent">
+                        {% for result in processing_results %}
+                        <div class="tab-pane fade {% if loop.first %}show active{% endif %}" 
+                             id="{{ result.processing_type }}" 
+                             role="tabpanel">
+                            <div class="mb-4">
+                                <h5>{{ result.processing_type | title }} Result</h5>
+                                
+                                {% if result.error_message %}
+                                <div class="alert alert-danger">
+                                    <h6 class="text-white">Error: {{ result.error_type }}</h6>
+                                    <p class="mb-0 text-white">{{ result.error_message }}</p>
+                                    {% if result.error_step %}
+                                    <p class="mb-0 mt-2 text-white"><small>Step: {{ result.error_step }}</small></p>
+                                    {% endif %}
+                                </div>
+                                {% endif %}
+                                
+                                {% if result.status == 'completed' %}
+                                <div class="d-flex justify-content-between mb-3">
+                                    <div>
+                                        <span class="badge bg-info me-1">Model: {{ result.ai_model_used or 'Unknown' }}</span>
+                                        {% if result.ai_tokens_used %}
+                                        <span class="badge bg-info">Tokens: {{ result.ai_tokens_used }}</span>
+                                        {% endif %}
+                                    </div>
+                                    <div>
+                                        <span class="badge bg-secondary">Processing time: {{ result.processing_time_ms }}ms</span>
+                                    </div>
+                                </div>
+                                
+                                {% if result.processed_result %}
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">Processed Result</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <pre class="json-formatter">{{ result.processed_result | tojson(indent=2) }}</pre>
+                                    </div>
+                                </div>
+                                {% endif %}
+                                
+                                <!-- Raw AI Response - always show this regardless of processing status -->
+                                <div class="accordion mt-3" id="raw{{ result.processing_type }}Accordion">
+                                    <div class="accordion-item">
+                                        <h2 class="accordion-header">
+                                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#raw{{ result.processing_type }}Content">
+                                                Raw AI Response & Trace Information
+                                            </button>
+                                        </h2>
+                                        <div id="raw{{ result.processing_type }}Content" class="accordion-collapse collapse">
+                                            <div class="accordion-body">
+                                                {% if result.raw_ai_response %}
+                                                    <h6 class="mb-3">Model: {{ result.raw_ai_response.model }}</h6>
+                                                    
+                                                    {% if result.raw_ai_response.timestamp %}
+                                                    <div class="mb-3">
+                                                        <strong>Timestamp:</strong> {{ result.raw_ai_response.timestamp }}
+                                                    </div>
+                                                    {% endif %}
+                                                    
+                                                    {% if result.raw_ai_response.request_type %}
+                                                    <div class="mb-3">
+                                                        <strong>Request Type:</strong> {{ result.raw_ai_response.request_type }}
+                                                    </div>
+                                                    {% endif %}
+                                                    
+                                                    {% if result.raw_ai_response.extraction_options %}
+                                                    <div class="mb-3">
+                                                        <strong>Extraction Options:</strong>
+                                                        <pre class="json-formatter">{{ result.raw_ai_response.extraction_options | tojson(indent=2) }}</pre>
+                                                    </div>
+                                                    {% endif %}
+                                                    
+                                                    {% if result.raw_ai_response.text %}
+                                                    <div class="mb-3">
+                                                        <strong>Raw Response Text:</strong>
+                                                        <pre class="border rounded p-3 bg-light">{{ result.raw_ai_response.text }}</pre>
+                                                    </div>
+                                                    {% endif %}
+                                                    
+                                                    <h6 class="mt-4 mb-3">Complete Response Object:</h6>
+                                                    <pre class="json-formatter">{{ result.raw_ai_response | tojson(indent=2) }}</pre>
+                                                {% else %}
+                                                    <div class="alert alert-warning">No raw AI response data available.</div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                        
+                        {% if not processing_results %}
+                        <div class="alert alert-warning">
+                            <p class="mb-0">No processing results found.</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Requested Operations -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card mb-4">
+                <div class="card-header pb-0">
+                    <h6>Requested Operations</h6>
+                </div>
+                <div class="card-body">
+                    <pre class="json-formatter">{{ processing_request.requested_operations | tojson(indent=2) }}</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Webhook Information -->
+    {% if processing_request.webhook_url %}
+    <div class="row">
+        <div class="col-12">
+            <div class="card mb-4">
+                <div class="card-header pb-0">
+                    <h6>Webhook Information</h6>
+                </div>
+                <div class="card-body">
+                    <p><strong>URL:</strong> {{ processing_request.webhook_url }}</p>
+                    
+                    {% if processing_request.webhook_sent_at %}
+                    <p><strong>Sent At:</strong> {{ processing_request.webhook_sent_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+                    {% else %}
+                    <p><strong>Status:</strong> <span class="badge bg-warning">Not sent</span></p>
+                    {% endif %}
+                    
+                    {% if processing_request.webhook_response %}
+                    <div class="accordion mt-3" id="webhookResponseAccordion">
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#webhookResponseContent">
+                                    Webhook Response
+                                </button>
+                            </h2>
+                            <div id="webhookResponseContent" class="accordion-collapse collapse">
+                                <div class="accordion-body">
+                                    <pre class="json-formatter">{{ processing_request.webhook_response | tojson(indent=2) }}</pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Apply syntax highlighting to JSON
+        document.querySelectorAll('.json-formatter').forEach(function(el) {
+            try {
+                let formatted = JSON.stringify(JSON.parse(el.textContent), null, 2);
+                el.textContent = formatted;
+            } catch (e) {
+                console.error('Failed to format JSON:', e);
+            }
+        });
+    });
+</script>
+{% endblock %}
+
+{% endblock %}

@@ -56,7 +56,7 @@ async def process_batch_job(batch_id: int, db: AsyncSession):
                     batch.failed_files += 1
                 else:
                     job.status = "completed"
-                    job.metadata = result.get("metadata")
+                    job.doc_metadata = result.get("metadata")
                     job.references = result.get("references")
                     job.extracted_text = result.get("extracted_text")
                     batch.processed_files += 1

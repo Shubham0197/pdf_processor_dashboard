@@ -28,5 +28,20 @@ async def create_tables():
     """Create database tables"""
     async with engine.begin() as conn:
         # Import all models here to ensure they are registered with Base
-        from app.models import batch, job, api_key, user
+        from app.models import batch, job, api_key, user, document, processing
         await conn.run_sync(Base.metadata.create_all)
+
+async def reset_db():
+    """Drop all tables and recreate them (DEVELOPMENT ONLY)
+    
+    This function should only be used during development to reset the database
+    when schema changes are made, or for testing purposes.
+    """
+    async with engine.begin() as conn:
+        # Import all models to ensure they are registered with Base
+        from app.models import batch, job, api_key, user, document, processing
+        # Drop all tables
+        await conn.run_sync(Base.metadata.drop_all)
+        # Recreate all tables with current schema
+        await conn.run_sync(Base.metadata.create_all)
+        print("Database has been reset successfully")

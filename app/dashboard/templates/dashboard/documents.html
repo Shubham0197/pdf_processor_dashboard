@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}PDF Documents{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card mb-4">
+                <div class="card-header pb-0 d-flex justify-content-between align-items-center">
+                    <h6>PDF Documents</h6>
+                    <div class="d-flex">
+                        <a href="/dashboard/documents/upload" class="btn btn-primary me-2">
+                            <i class="fas fa-upload me-1"></i> Upload Document
+                        </a>
+                        <form class="d-flex me-2" action="/dashboard/documents/" method="GET">
+                            <input class="form-control me-2" type="search" placeholder="Search documents..." name="search" value="{{ search or '' }}">
+                            <button class="btn btn-outline-primary" type="submit">Search</button>
+                        </form>
+                    </div>
+                </div>
+                <div class="card-body px-0 pt-0 pb-2">
+                    <div class="table-responsive p-0">
+                        <table class="table align-items-center mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Document</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">File Info</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">First Seen</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Last Accessed</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Processing Count</th>
+                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for document in documents %}
+                                <tr>
+                                    <td>
+                                        <div class="d-flex px-2 py-1">
+                                            <div>
+                                                <i class="fas fa-file-pdf text-danger me-3"></i>
+                                            </div>
+                                            <div class="d-flex flex-column justify-content-center">
+                                                <h6 class="mb-0 text-sm">{{ document.filename or "Unnamed PDF" }}</h6>
+                                                <p class="text-xs text-secondary mb-0 text-truncate" style="max-width: 300px;">
+                                                    <a href="{{ document.url }}" target="_blank" rel="noopener noreferrer">{{ document.url }}</a>
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <p class="text-xs font-weight-bold mb-0">
+                                            {% if document.file_size %}
+                                                {{ (document.file_size / 1024) | round(1) }} KB
+                                            {% else %}
+                                                Size unknown
+                                            {% endif %}
+                                        </p>
+                                        <p class="text-xs text-secondary mb-0">{{ document.mime_type or "Unknown type" }}</p>
+                                    </td>
+                                    <td>
+                                        <p class="text-xs font-weight-bold mb-0">{{ document.first_seen_at.strftime('%Y-%m-%d') }}</p>
+                                        <p class="text-xs text-secondary mb-0">{{ document.first_seen_at.strftime('%H:%M:%S') }}</p>
+                                    </td>
+                                    <td>
+                                        <p class="text-xs font-weight-bold mb-0">{{ document.last_accessed_at.strftime('%Y-%m-%d') }}</p>
+                                        <p class="text-xs text-secondary mb-0">{{ document.last_accessed_at.strftime('%H:%M:%S') }}</p>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-primary">
+                                            {{ document.processing_requests|length if document.processing_requests else 0 }}
+                                        </span>
+                                    </td>
+                                    <td class="align-middle">
+                                        <a href="/dashboard/documents/{{ document.id }}" class="text-secondary font-weight-bold text-xs">
+                                            <i class="fas fa-eye me-1"></i> View Details
+                                        </a>
+                                        {% if document.processing_requests and document.processing_requests|length > 0 %}
+                                            <a href="/dashboard/documents/{{ document.id }}/preview" class="text-secondary font-weight-bold text-xs ms-2">
+                                                <i class="fas fa-file me-1"></i> Preview
+                                            </a>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+
+                                {% if not documents %}
+                                <tr>
+                                    <td colspan="6" class="text-center py-4">
+                                        <p class="text-secondary mb-0">No documents found.</p>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- Pagination -->
+                {% if total_pages > 1 %}
+                <div class="card-footer d-flex justify-content-center">
+                    <nav>
+                        <ul class="pagination">
+                            <li class="page-item {% if page == 1 %}disabled{% endif %}">
+                                <a class="page-link" href="/dashboard/documents/?page={{ page-1 }}{% if q %}&q={{ q }}{% endif %}" aria-label="Previous">
+                                    <span aria-hidden="true">&laquo;</span>
+                                </a>
+                            </li>
+                            
+                            {% for p in range(1, total_pages + 1) %}
+                                {% if p == page %}
+                                    <li class="page-item active"><a class="page-link" href="#">{{ p }}</a></li>
+                                {% elif p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
+                                    <li class="page-item"><a class="page-link" href="/dashboard/documents/?page={{ p }}{% if q %}&q={{ q }}{% endif %}">{{ p }}</a></li>
+                                {% elif p == page - 3 or p == page + 3 %}
+                                    <li class="page-item disabled"><a class="page-link" href="#">...</a></li>
+                                {% endif %}
+                            {% endfor %}
+                            
+                            <li class="page-item {% if page == total_pages %}disabled{% endif %}">
+                                <a class="page-link" href="/dashboard/documents/?page={{ page+1 }}{% if q %}&q={{ q }}{% endif %}" aria-label="Next">
+                                    <span aria-hidden="true">&raquo;</span>
+                                </a>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}Upload Document{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card mb-4">
+                <div class="card-header pb-0 d-flex justify-content-between align-items-center">
+                    <h6>Upload Document</h6>
+                    <a href="/dashboard/documents" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-1"></i> Back to Documents
+                    </a>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        <div class="row mb-4">
+                            <div class="col-md-12">
+                                <div class="mb-3">
+                                    <label for="document_url" class="form-label">PDF URL</label>
+                                    <input type="url" class="form-control" id="document_url" name="document_url" 
+                                           placeholder="https://example.com/path/to/document.pdf" required>
+                                    <div class="form-text text-xs text-secondary">
+                                        Enter the URL of the PDF document you want to process
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row mb-4">
+                            <div class="col-md-12">
+                                <h6>Processing Options</h6>
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input" type="checkbox" name="extract_metadata" id="extract_metadata" checked>
+                                            <label class="form-check-label" for="extract_metadata">Extract Metadata</label>
+                                            <p class="text-xs text-secondary mb-0">Extract title, authors, abstract, publication date, etc.</p>
+                                        </div>
+                                        
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input" type="checkbox" name="extract_references" id="extract_references" checked>
+                                            <label class="form-check-label" for="extract_references">Extract References</label>
+                                            <p class="text-xs text-secondary mb-0">Extract citation references from the document.</p>
+                                        </div>
+                                        
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input" type="checkbox" name="extract_full_text" id="extract_full_text">
+                                            <label class="form-check-label" for="extract_full_text">Extract Full Text</label>
+                                            <p class="text-xs text-secondary mb-0">Extract the complete text content of the document.</p>
+                                        </div>
+                                        
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input" type="checkbox" name="complete_references" id="complete_references">
+                                            <label class="form-check-label" for="complete_references">Complete References</label>
+                                            <p class="text-xs text-secondary mb-0">Attempt to complete partial reference information.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row mb-4">
+                            <div class="col-md-12">
+                                <div class="mb-3">
+                                    <label for="webhook_url" class="form-label">Webhook URL (Optional)</label>
+                                    <input type="url" class="form-control" id="webhook_url" name="webhook_url" placeholder="https://your-webhook-url.com">
+                                    <div class="form-text text-xs text-secondary">
+                                        If provided, we'll send a POST request with processing results when completed.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-12 text-center">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-upload me-1"></i> Upload and Process
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

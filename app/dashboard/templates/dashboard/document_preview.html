@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}Document Preview{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card mb-4">
+                <div class="card-header pb-0 d-flex justify-content-between align-items-center">
+                    <h6>Document Preview: {{ document.filename or "Unnamed PDF" }}</h6>
+                    <div>
+                        <a href="/dashboard/documents/{{ document.id }}" class="btn btn-sm btn-outline-secondary">
+                            <i class="fas fa-arrow-left me-1"></i> Back to Document
+                        </a>
+                        <a href="/dashboard/documents/processing/{{ processing_request.id }}" class="btn btn-sm btn-outline-primary ms-2">
+                            <i class="fas fa-list me-1"></i> Processing Details
+                        </a>
+                        <a href="{{ document.url }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-primary ms-2">
+                            <i class="fas fa-external-link-alt me-1"></i> Open PDF
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Left side - PDF Viewer -->
+        <div class="col-lg-7 mb-4">
+            <div class="card h-100">
+                <div class="card-header pb-0">
+                    <h6>PDF Document</h6>
+                </div>
+                <div class="card-body p-0">
+                    <div class="ratio ratio-4x3">
+                        <iframe src="{{ document.url }}" allowfullscreen></iframe>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right side - Extracted Information -->
+        <div class="col-lg-5">
+            <!-- Tabs for different sections -->
+            <div class="card mb-4">
+                <div class="card-header pb-0">
+                    <h6>Extracted Information</h6>
+                </div>
+                <div class="card-body">
+                    <ul class="nav nav-tabs" id="documentTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="metadata-tab" data-bs-toggle="tab" data-bs-target="#metadata" 
+                                    type="button" role="tab" aria-controls="metadata" aria-selected="true">
+                                Metadata
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="references-tab" data-bs-toggle="tab" data-bs-target="#references" 
+                                    type="button" role="tab" aria-controls="references" aria-selected="false">
+                                References
+                            </button>
+                        </li>
+                    </ul>
+                    <div class="tab-content p-3 border border-top-0 rounded-bottom" id="documentTabsContent">
+                        <div class="tab-pane fade show active" id="metadata" role="tabpanel" aria-labelledby="metadata-tab">
+                            {% if metadata %}
+                                <div class="card mb-3">
+                                    <div class="card-body p-3">
+                                        <h5 class="card-title">
+                                            {{ metadata.title or "Untitled Document" }}
+                                        </h5>
+                                        {% if metadata.authors %}
+                                            <div class="mb-3">
+                                                <h6 class="text-muted">Authors:</h6>
+                                                <p class="mb-1">{{ metadata.authors | join(", ") }}</p>
+                                            </div>
+                                        {% endif %}
+                                        
+                                        {% if metadata.publication_date %}
+                                            <div class="mb-3">
+                                                <h6 class="text-muted">Published:</h6>
+                                                <p class="mb-1">{{ metadata.publication_date }}</p>
+                                            </div>
+                                        {% endif %}
+                                        
+                                        {% if metadata.doi %}
+                                            <div class="mb-3">
+                                                <h6 class="text-muted">DOI:</h6>
+                                                <p class="mb-1">{{ metadata.doi }}</p>
+                                            </div>
+                                        {% endif %}
+                                        
+                                        {% if metadata.abstract %}
+                                            <div class="mb-3">
+                                                <h6 class="text-muted">Abstract:</h6>
+                                                <p class="mb-1">{{ metadata.abstract }}</p>
+                                            </div>
+                                        {% endif %}
+                                        
+                                        {% if metadata.keywords %}
+                                            <div class="mb-3">
+                                                <h6 class="text-muted">Keywords:</h6>
+                                                <p class="mb-1">{{ metadata.keywords | join(", ") }}</p>
+                                            </div>
+                                        {% endif %}
+                                        
+                                        {% if metadata.journal or metadata.conference %}
+                                            <div class="mb-3">
+                                                <h6 class="text-muted">Published in:</h6>
+                                                <p class="mb-1">{{ metadata.journal or metadata.conference }}</p>
+                                                {% if metadata.volume or metadata.issue or metadata.pages %}
+                                                    <p class="text-muted mb-1">
+                                                        {% if metadata.volume %}Vol. {{ metadata.volume }}{% endif %}
+                                                        {% if metadata.issue %}, Issue {{ metadata.issue }}{% endif %}
+                                                        {% if metadata.pages %}, Pages {{ metadata.pages }}{% endif %}
+                                                    </p>
+                                                {% endif %}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">All Metadata</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <pre class="json-formatter">{{ metadata | tojson(indent=2) }}</pre>
+                                    </div>
+                                </div>
+                            {% else %}
+                                <div class="alert alert-info">
+                                    <p class="mb-0">No metadata extracted yet or processing has failed.</p>
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div class="tab-pane fade" id="references" role="tabpanel" aria-labelledby="references-tab">
+                            {% if references %}
+                                {% if references is string %}
+                                    <div class="alert alert-danger">
+                                        <p class="mb-0">An error occurred: {{ references }}</p>
+                                    </div>
+                                {% elif references is mapping and references.error %}
+                                    <div class="alert alert-danger">
+                                        <p class="mb-0">An error occurred: {{ references.error }}</p>
+                                    </div>
+                                {% else %}
+                                    <h6>Total References: {{ references|length }}</h6>
+                                    <div class="list-group">
+                                        {% for ref in references %}
+                                            <div class="list-group-item">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <span class="badge bg-primary rounded-pill me-2">{{ loop.index }}</span>
+                                                    {% if ref.title %}
+                                                        <h6 class="mb-1 flex-grow-1">{{ ref.title }}</h6>
+                                                    {% else %}
+                                                        <h6 class="mb-1 flex-grow-1 text-muted">[Untitled Reference]</h6>
+                                                    {% endif %}
+                                                </div>
+                                                
+                                                {% if ref.authors %}
+                                                    <p class="mb-1"><strong>Authors:</strong> {{ ref.authors | join(", ") }}</p>
+                                                {% endif %}
+                                                
+                                                {% if ref.year %}
+                                                    <p class="mb-1"><strong>Year:</strong> {{ ref.year }}</p>
+                                                {% endif %}
+                                                
+                                                {% if ref.journal %}
+                                                    <p class="mb-1"><strong>Journal:</strong> {{ ref.journal }}</p>
+                                                {% endif %}
+                                                
+                                                {% if ref.doi %}
+                                                    <p class="mb-1">
+                                                        <strong>DOI:</strong> 
+                                                        <a href="https://doi.org/{{ ref.doi }}" target="_blank" rel="noopener noreferrer">{{ ref.doi }}</a>
+                                                    </p>
+                                                {% endif %}
+                                                
+                                                {% if ref.url %}
+                                                    <p class="mb-1">
+                                                        <strong>URL:</strong> 
+                                                        <a href="{{ ref.url }}" target="_blank" rel="noopener noreferrer">{{ ref.url }}</a>
+                                                    </p>
+                                                {% endif %}
+                                                
+                                                {% if ref.citation_text %}
+                                                    <div class="mt-2">
+                                                        <p class="text-muted mb-1"><em>Original Citation:</em></p>
+                                                        <p class="mb-0">{{ ref.citation_text }}</p>
+                                                    </div>
+                                                {% endif %}
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            {% else %}
+                                <div class="alert alert-info">
+                                    <p class="mb-0">No references extracted yet or processing has failed.</p>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Apply syntax highlighting to JSON
+        document.querySelectorAll('.json-formatter').forEach(function(el) {
+            try {
+                let formatted = JSON.stringify(JSON.parse(el.textContent), null, 2);
+                el.textContent = formatted;
+            } catch (e) {
+                console.error('Failed to format JSON:', e);
+            }
+        });
+    });
+</script>
+{% endblock %}
+
+{% endblock %}

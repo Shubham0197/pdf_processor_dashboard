@@ -9,7 +9,7 @@ import os
 from app.api.router import api_router
 from app.database import get_db, create_tables
 from app.config import settings
-from app.dashboard.routes import dashboard_router
+from app.dashboard.routes_init import dashboard_router
 from app.utils.auth import create_access_token, get_current_user
 from app.models.user import User
 from app.schemas.api_key import APIKeyUpdate
@@ -39,6 +39,11 @@ static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 os.makedirs(static_dir, exist_ok=True)
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
+# Mount dashboard static files
+dashboard_static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard/static")
+os.makedirs(dashboard_static_dir, exist_ok=True)
+app.mount("/dashboard/static", StaticFiles(directory=dashboard_static_dir), name="dashboard_static")
+
 # Set up templates for dashboard
 dashboard_templates = Jinja2Templates(directory=os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard/templates"))
 
@@ -46,7 +51,6 @@ dashboard_templates = Jinja2Templates(directory=os.path.join(os.path.dirname(os.
 login_templates = Jinja2Templates(directory=os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates"))
 
 # Dashboard routes
-from app.dashboard.routes import dashboard_router
 app.include_router(dashboard_router)
 
 # Login route
@@ -63,7 +67,8 @@ async def login_page(request: Request):
 
 @app.get("/process-pdf", response_class=HTMLResponse)
 async def process_pdf_page(request: Request, current_user: User = Depends(get_current_user_from_cookie)):
-    return login_templates.TemplateResponse("process_pdf.html", {"request": request, "user": current_user, "active_page": "process_pdf"})
+    # Redirect to the new document upload page
+    return RedirectResponse(url="/dashboard/documents/upload", status_code=303)
 
 @app.get("/api-key", response_class=HTMLResponse)
 async def api_key_page(request: Request, current_user: User = Depends(get_current_user_from_cookie)):

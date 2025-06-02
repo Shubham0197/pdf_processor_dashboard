@@ -1,0 +1,304 @@
+"""
+Dashboard routes for document management in the enhanced schema.
+"""
+import uuid
+from typing import Optional, Dict, Any, List
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends, Request, Form, HTTPException, Query
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+
+from app.api.deps import get_db
+from app.dashboard.routes import get_current_user_from_cookie as get_current_user
+from app.models.document import PDFDocument
+from app.models.processing import ProcessingRequest, AIProcessingResult
+from app.models.user import User
+from app.services.document_service import (
+    get_document_by_id,
+    get_all_documents,
+    search_documents,
+    get_document_processing_history,
+    get_or_create_document
+)
+from app.services.processing_service import (
+    process_document,
+    get_processing_request,
+    get_processing_results
+)
+
+router = APIRouter(prefix="/documents", tags=["document dashboard"])
+
+templates = Jinja2Templates(directory="app/dashboard/templates")
+
+# Helper function to safely get user ID from either a User object or dict
+def get_user_id(user_obj):
+    """Extract user ID safely from either User object or dict"""
+    if isinstance(user_obj, User):
+        return user_obj.id
+    elif isinstance(user_obj, dict):
+        return user_obj.get("id")
+    return None
+
+@router.get("/", response_class=HTMLResponse)
+async def documents_page(
+    request: Request,
+    q: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Documents listing page."""
+    if q:
+        documents, total = await search_documents(db, q, page, limit)
+    else:
+        documents, total = await get_all_documents(db, page, limit)
+    
+    # Calculate pagination
+    total_pages = (total + limit - 1) // limit
+    has_next = page < total_pages
+    has_prev = page > 1
+    
+    return templates.TemplateResponse(
+        "dashboard/documents.html",
+        {
+            "request": request,
+            "user": current_user,
+            "documents": documents,
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "total_pages": total_pages,
+            "has_next": has_next,
+            "has_prev": has_prev,
+            "q": q,
+            "active_page": "documents"
+        }
+    )
+
+@router.get("/upload", response_class=HTMLResponse)
+async def document_upload(
+    request: Request,
+    current_user: User = Depends(get_current_user)
+):
+    """Document upload page."""
+    return templates.TemplateResponse(
+        "dashboard/document_upload.html",
+        {
+            "request": request,
+            "user": current_user,
+            "active_page": "documents"
+        }
+    )
+
+@router.post("/upload", response_class=HTMLResponse)
+async def document_upload_submit(
+    request: Request,
+    document_url: str = Form(...),
+    extract_metadata: bool = Form(True),
+    extract_references: bool = Form(True),
+    extract_full_text: bool = Form(False),
+    complete_references: bool = Form(False),
+    webhook_url: Optional[str] = Form(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Process a new document by URL."""
+    # Create or get the document
+    document = await get_or_create_document(db, document_url)
+    
+    # Prepare processing options
+    options = {
+        "extract_metadata": extract_metadata,
+        "extract_references": extract_references,
+        "extract_full_text": extract_full_text,
+        "complete_references": complete_references
+    }
+    
+    # Process the document using the helper function to get user ID
+    processing_request, _ = await process_document(
+        db=db,
+        file_url=document.url,
+        options=options,
+        webhook_url=webhook_url,
+        user_id=get_user_id(current_user)
+    )
+    
+    # Redirect to the processing detail page
+    return RedirectResponse(
+        url=f"/dashboard/documents/processing/{processing_request.id}",
+        status_code=303  # See Other
+    )
+
+@router.get("/{document_id}", response_class=HTMLResponse)
+async def document_detail(
+    request: Request,
+    document_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Document detail page."""
+    document = await get_document_by_id(db, document_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Get processing history
+    processing_history = await get_document_processing_history(db, document_id)
+    
+    return templates.TemplateResponse(
+        "dashboard/document_detail.html",
+        {
+            "request": request,
+            "user": current_user,
+            "document": document,
+            "processing_history": processing_history,
+            "active_page": "documents"
+        }
+    )
+
+@router.get("/processing/{request_id}", response_class=HTMLResponse)
+async def processing_detail(
+    request: Request,
+    request_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Processing request detail page."""
+    # Get the processing request
+    processing_request = await get_processing_request(db, request_id)
+    if not processing_request:
+        raise HTTPException(status_code=404, detail="Processing request not found")
+    
+    # Get the document
+    document = await get_document_by_id(db, processing_request.document_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Get processing results
+    results = await get_processing_results(db, request_id)
+    
+    return templates.TemplateResponse(
+        "dashboard/processing_detail.html",
+        {
+            "request": request,
+            "user": current_user,
+            "processing_request": processing_request,
+            "document": document,
+            "processing_results": results,
+            "active_page": "documents"
+        }
+    )
+
+@router.get("/{document_id}/process", response_class=HTMLResponse)
+async def document_process(
+    request: Request,
+    document_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Document processing page."""
+    document = await get_document_by_id(db, document_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    return templates.TemplateResponse(
+        "dashboard/document_process.html",
+        {
+            "request": request,
+            "user": current_user,
+            "document": document,
+            "active_page": "documents"
+        }
+    )
+
+@router.post("/{document_id}/process")
+async def document_process_submit(
+    request: Request,
+    document_id: uuid.UUID,
+    extract_metadata: bool = Form(True),
+    extract_references: bool = Form(True),
+    extract_full_text: bool = Form(False),
+    complete_references: bool = Form(False),
+    webhook_url: Optional[str] = Form(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Process an existing document."""
+    document = await get_document_by_id(db, document_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Prepare processing options
+    options = {
+        "extract_metadata": extract_metadata,
+        "extract_references": extract_references,
+        "extract_full_text": extract_full_text,
+        "complete_references": complete_references
+    }
+    
+    # Process the document using the helper function to get user ID
+    processing_request, _ = await process_document(
+        db=db,
+        file_url=document.url,
+        options=options,
+        webhook_url=webhook_url,
+        user_id=get_user_id(current_user)
+    )
+    
+    # Check if the request accepts JSON (AJAX request)
+    accept_header = request.headers.get("accept", "")
+    if "application/json" in accept_header:
+        # Return JSON response for AJAX requests
+        return {
+            "id": str(processing_request.id),
+            "status": processing_request.status,
+            "document_id": str(document_id),
+            "created_at": processing_request.created_at.isoformat() if processing_request.created_at else None,
+            "message": "Processing request created successfully"
+        }
+    else:
+        # Redirect to the processing detail page for regular form submissions
+        return RedirectResponse(
+            url=f"/dashboard/documents/processing/{processing_request.id}",
+            status_code=303  # See Other
+        )
+
+@router.get("/{document_id}/preview", response_class=HTMLResponse)
+async def document_preview(
+    request: Request,
+    document_id: uuid.UUID,
+    processing_id: Optional[uuid.UUID] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Document preview page."""
+    document = await get_document_by_id(db, document_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Get processing results if ID provided
+    processing_request = None
+    results = []
+    
+    if processing_id:
+        processing_request = await get_processing_request(db, processing_id)
+        results = await get_processing_results(db, processing_id)
+    else:
+        # Get the latest processing request
+        processing_history = await get_document_processing_history(db, document_id)
+        if processing_history:
+            processing_request = processing_history[0]
+            results = await get_processing_results(db, processing_request.id)
+    
+    return templates.TemplateResponse(
+        "dashboard/document_preview.html",
+        {
+            "request": request,
+            "user": current_user,
+            "document": document,
+            "processing_request": processing_request,
+            "results": results,
+            "active_page": "documents"
+        }
+    )

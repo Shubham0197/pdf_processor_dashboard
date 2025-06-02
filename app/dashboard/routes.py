@@ -30,8 +30,22 @@ async def get_current_user_from_cookie(
     db: AsyncSession = Depends(get_db),
     access_token: str = Cookie(None, alias="access_token")
 ) -> User:
+    import logging
+    logger = logging.getLogger("app.auth")
+    logger.setLevel(logging.DEBUG)
+    
+    # Add console handler if not already added
+    if not logger.handlers:
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.DEBUG)
+        formatter = logging.Formatter('%(levelname)s - COOKIE AUTH - %(message)s')
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
+    
+    logger.debug(f"Cookie auth attempt with token: {'Present (starts with: ' + access_token[:10] + '...)' if access_token else 'None'}")
     """Get current user from cookie"""
     if not access_token:
+        logger.error("Cookie auth failed: No access_token cookie")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
@@ -46,12 +60,15 @@ async def get_current_user_from_cookie(
         payload = jwt.decode(access_token, settings.SECRET_KEY, algorithms=["HS256"])
         user_id: str = payload.get("sub")
         if user_id is None:
+            logger.error("Cookie auth failed: No user ID in token payload")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Could not validate credentials",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-    except JWTError:
+        logger.debug(f"Token decoded successfully. User ID: {user_id}")
+    except Exception as e:
+        logger.error(f"Cookie auth failed: Token validation error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
@@ -62,9 +79,13 @@ async def get_current_user_from_cookie(
     user = result.scalars().first()
     
     if user is None:
+        logger.error(f"Cookie auth failed: User ID {user_id} not found in database")
         raise HTTPException(status_code=404, detail="User not found")
     if not user.is_active:
+        logger.error(f"Cookie auth failed: User ID {user_id} is inactive")
         raise HTTPException(status_code=400, detail="Inactive user")
+    
+    logger.debug(f"Cookie auth successful for user: {user.email}")
     
     return user
 
