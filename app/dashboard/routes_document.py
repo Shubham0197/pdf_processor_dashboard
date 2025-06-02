@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any, List
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import APIRouter, Depends, Request, Form, HTTPException, Query
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 from app.api.deps import get_db
@@ -92,7 +92,7 @@ async def document_upload(
         }
     )
 
-@router.post("/upload", response_class=HTMLResponse)
+@router.post("/upload")
 async def document_upload_submit(
     request: Request,
     document_url: str = Form(...),
@@ -125,11 +125,23 @@ async def document_upload_submit(
         user_id=get_user_id(current_user)
     )
     
-    # Redirect to the processing detail page
-    return RedirectResponse(
-        url=f"/dashboard/documents/processing/{processing_request.id}",
-        status_code=303  # See Other
-    )
+    # Check if the request accepts JSON (AJAX request)
+    accept_header = request.headers.get("accept", "")
+    if "application/json" in accept_header:
+        # Return JSON response for AJAX requests
+        return JSONResponse({
+            "id": str(processing_request.id),
+            "status": processing_request.status,
+            "document_id": str(document.id),
+            "created_at": processing_request.created_at.isoformat() if processing_request.created_at else None,
+            "message": "Processing request created successfully"
+        })
+    else:
+        # Redirect to the processing detail page for regular form submissions
+        return RedirectResponse(
+            url=f"/dashboard/documents/processing/{processing_request.id}",
+            status_code=303  # See Other
+        )
 
 @router.get("/{document_id}", response_class=HTMLResponse)
 async def document_detail(
@@ -250,13 +262,13 @@ async def document_process_submit(
     accept_header = request.headers.get("accept", "")
     if "application/json" in accept_header:
         # Return JSON response for AJAX requests
-        return {
+        return JSONResponse({
             "id": str(processing_request.id),
             "status": processing_request.status,
             "document_id": str(document_id),
             "created_at": processing_request.created_at.isoformat() if processing_request.created_at else None,
             "message": "Processing request created successfully"
-        }
+        })
     else:
         # Redirect to the processing detail page for regular form submissions
         return RedirectResponse(

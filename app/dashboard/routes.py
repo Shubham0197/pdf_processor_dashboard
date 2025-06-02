@@ -10,7 +10,8 @@ from datetime import datetime, timedelta
 
 from app.database import get_db
 from app.models.batch import BatchJob
-from app.models.job import ProcessingJob
+from app.models.processing import ProcessingRequest, AIProcessingResult
+from app.models.document import PDFDocument, BatchDocument
 from app.models.api_key import APIKey
 from app.models.user import User
 from app.schemas.api_key import APIKeyCreate, APIKeyUpdate
@@ -91,15 +92,31 @@ async def get_current_user_from_cookie(
 
 # Helper function to get dashboard stats
 async def get_dashboard_stats(db: AsyncSession):
-    """Get statistics for dashboard"""
+    """Get enhanced statistics for dashboard using new schema"""
     # Get total counts
     total_batches_result = await db.execute(select(BatchJob))
     total_batches = len(total_batches_result.scalars().all())
     
-    total_jobs_result = await db.execute(select(ProcessingJob))
-    total_jobs = len(total_jobs_result.scalars().all())
+    total_requests_result = await db.execute(select(ProcessingRequest))
+    total_requests = len(total_requests_result.scalars().all())
     
-    # Get counts by status
+    total_documents_result = await db.execute(select(PDFDocument))
+    total_documents = len(total_documents_result.scalars().all())
+    
+    total_ai_results_result = await db.execute(select(AIProcessingResult))
+    total_ai_results = len(total_ai_results_result.scalars().all())
+    
+    # Get counts by status for processing requests
+    pending_requests_result = await db.execute(select(ProcessingRequest).where(ProcessingRequest.status == "processing"))
+    pending_requests = len(pending_requests_result.scalars().all())
+    
+    completed_requests_result = await db.execute(select(ProcessingRequest).where(ProcessingRequest.status == "completed"))
+    completed_requests = len(completed_requests_result.scalars().all())
+    
+    failed_requests_result = await db.execute(select(ProcessingRequest).where(ProcessingRequest.status == "failed"))
+    failed_requests = len(failed_requests_result.scalars().all())
+    
+    # Get batch status counts
     pending_batches_result = await db.execute(select(BatchJob).where(BatchJob.status == "pending"))
     pending_batches = len(pending_batches_result.scalars().all())
     
@@ -118,23 +135,21 @@ async def get_dashboard_stats(db: AsyncSession):
     )
     recent_batches = recent_batches_result.scalars().all()
     
-    # Get recent jobs
-    recent_jobs_result = await db.execute(
-        select(ProcessingJob).order_by(ProcessingJob.created_at.desc()).limit(5)
+    # Get recent processing requests
+    recent_requests_result = await db.execute(
+        select(ProcessingRequest).order_by(ProcessingRequest.created_at.desc()).limit(5)
     )
-    recent_jobs = recent_jobs_result.scalars().all()
+    recent_requests = recent_requests_result.scalars().all()
     
-    # Calculate success rate
+    # Calculate success rate for processing requests
     success_rate = 0
-    if total_jobs > 0:
-        completed_jobs_result = await db.execute(select(ProcessingJob).where(ProcessingJob.status == "completed"))
-        completed_jobs = len(completed_jobs_result.scalars().all())
-        success_rate = (completed_jobs / total_jobs) * 100
+    if total_requests > 0:
+        success_rate = (completed_requests / total_requests) * 100
     
-    # Get processing time stats
+    # Get processing time stats from AIProcessingResult table
     processing_time_result = await db.execute(
-        select(ProcessingJob.processing_time).where(
-            ProcessingJob.processing_time.is_not(None)
+        select(AIProcessingResult.processing_time_ms).where(
+            AIProcessingResult.processing_time_ms.is_not(None)
         )
     )
     processing_times = [time for time in processing_time_result.scalars().all() if time]
@@ -143,45 +158,102 @@ async def get_dashboard_stats(db: AsyncSession):
     if processing_times:
         avg_processing_time = sum(processing_times) / len(processing_times)
     
+    # Get AI model usage statistics
+    ai_model_stats_result = await db.execute(
+        select(AIProcessingResult.ai_model_used, func.count(AIProcessingResult.id))
+        .group_by(AIProcessingResult.ai_model_used)
+    )
+    ai_model_stats = {model: count for model, count in ai_model_stats_result.all() if model}
+    
+    # Get processing type statistics  
+    processing_type_stats_result = await db.execute(
+        select(AIProcessingResult.processing_type, func.count(AIProcessingResult.id))
+        .group_by(AIProcessingResult.processing_type)
+    )
+    processing_type_stats = {ptype: count for ptype, count in processing_type_stats_result.all() if ptype}
+    
+    # Get token usage statistics
+    total_tokens_result = await db.execute(
+        select(func.sum(AIProcessingResult.ai_tokens_used)).where(
+            AIProcessingResult.ai_tokens_used.is_not(None)
+        )
+    )
+    total_tokens = total_tokens_result.scalar() or 0
+    
     # Get daily stats for the last 7 days
     daily_stats = []
     for i in range(7, 0, -1):
         date = datetime.now() - timedelta(days=i)
         date_str = date.strftime("%Y-%m-%d")
         
-        # Get jobs created on this date
+        # Get processing requests created on this date
         day_start = datetime(date.year, date.month, date.day)
         day_end = day_start + timedelta(days=1)
         
-        jobs_result = await db.execute(
-            select(ProcessingJob).where(
-                ProcessingJob.created_at >= day_start,
-                ProcessingJob.created_at < day_end
+        requests_result = await db.execute(
+            select(ProcessingRequest).where(
+                ProcessingRequest.created_at >= day_start,
+                ProcessingRequest.created_at < day_end
             )
         )
-        jobs = jobs_result.scalars().all()
+        requests = requests_result.scalars().all()
         
-        completed = len([j for j in jobs if j.status == "completed"])
-        failed = len([j for j in jobs if j.status == "failed"])
+        completed = len([r for r in requests if r.status == "completed"])
+        failed = len([r for r in requests if r.status == "failed"])
+        processing = len([r for r in requests if r.status == "processing"])
         
         daily_stats.append({
             "date": date_str,
-            "total": len(jobs),
+            "total": len(requests),
             "completed": completed,
-            "failed": failed
+            "failed": failed,
+            "processing": processing
         })
     
+    # Calculate error rate
+    error_rate = 0
+    if total_ai_results > 0:
+        error_results_result = await db.execute(
+            select(AIProcessingResult).where(AIProcessingResult.status == "failed")
+        )
+        error_results = len(error_results_result.scalars().all())
+        error_rate = (error_results / total_ai_results) * 100
+    
     return {
+        # Basic counts
         "total_batches": total_batches,
-        "total_jobs": total_jobs,
+        "total_requests": total_requests,
+        "total_documents": total_documents,
+        "total_ai_results": total_ai_results,
+        "total_jobs": total_requests,  # For compatibility with template
+        
+        # Processing request status
+        "pending_requests": pending_requests,
+        "completed_requests": completed_requests,
+        "failed_requests": failed_requests,
+        
+        # Batch status
         "pending_batches": pending_batches,
         "processing_batches": processing_batches,
         "completed_batches": completed_batches,
         "failed_batches": failed_batches,
+        
+        # Recent data
         "recent_batches": recent_batches,
-        "recent_jobs": recent_jobs,
+        "recent_requests": recent_requests,
+        "recent_jobs": recent_requests,  # For compatibility with template
+        
+        # Performance metrics
         "success_rate": round(success_rate, 2),
+        "error_rate": round(error_rate, 2),
         "avg_processing_time": round(avg_processing_time / 1000, 2) if avg_processing_time else 0,  # Convert to seconds
+        "total_tokens": total_tokens,
+        
+        # AI analytics
+        "ai_model_stats": ai_model_stats,
+        "processing_type_stats": processing_type_stats,
+        
+        # Time series data
         "daily_stats": daily_stats
     }
 
@@ -263,7 +335,7 @@ async def batch_detail(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_from_cookie)
 ):
-    """Batch job detail page"""
+    """Batch job detail page with enhanced schema"""
     # Get batch
     batch_result = await db.execute(select(BatchJob).where(BatchJob.batch_id == batch_id))
     batch = batch_result.scalars().first()
@@ -283,18 +355,87 @@ async def batch_detail(
     else:
         batch.is_single_pdf = False
     
-    # Get jobs for this batch
-    jobs_result = await db.execute(
-        select(ProcessingJob).where(ProcessingJob.batch_id == batch.id)
+    # Get processing requests for this batch with document information
+    processing_requests_result = await db.execute(
+        select(ProcessingRequest, PDFDocument)
+        .join(PDFDocument, ProcessingRequest.document_id == PDFDocument.id, isouter=True)
+        .where(ProcessingRequest.batch_id == batch.id)
+        .order_by(ProcessingRequest.created_at.desc())
     )
-    jobs = jobs_result.scalars().all()
+    processing_data = processing_requests_result.all()
+    
+    # Get AI processing results for these requests
+    processing_request_ids = [req.id for req, doc in processing_data]
+    ai_results_result = await db.execute(
+        select(AIProcessingResult)
+        .where(AIProcessingResult.processing_request_id.in_(processing_request_ids))
+        .order_by(AIProcessingResult.created_at.desc())
+    )
+    ai_results = ai_results_result.scalars().all()
+    
+    # Group AI results by processing request ID
+    ai_results_by_request = {}
+    for result in ai_results:
+        if result.processing_request_id not in ai_results_by_request:
+            ai_results_by_request[result.processing_request_id] = []
+        ai_results_by_request[result.processing_request_id].append(result)
+    
+    # Prepare enhanced job data with AI results
+    enhanced_jobs = []
+    for processing_request, document in processing_data:
+        job_ai_results = ai_results_by_request.get(processing_request.id, [])
+        
+        # Calculate total processing time from AI results
+        total_processing_time = sum(result.processing_time_ms for result in job_ai_results if result.processing_time_ms)
+        
+        # Determine overall status (failed if any AI result failed)
+        overall_status = processing_request.status
+        has_failures = any(result.status == 'failed' for result in job_ai_results)
+        if has_failures and overall_status == 'completed':
+            overall_status = 'partial_failure'
+        
+        # Extract file name from URL with proper error handling
+        file_name = "Unknown"
+        file_url = None
+        
+        if document and hasattr(document, 'file_url') and document.file_url:
+            file_url = document.file_url
+            try:
+                file_name = file_url.split("/")[-1]
+            except (AttributeError, IndexError):
+                file_name = "Unknown"
+        elif batch.is_single_pdf and batch.request_data and "file" in batch.request_data:
+            # Fallback to batch request data for single PDF processing
+            file_url = batch.request_data.get("file", "")
+            try:
+                file_name = file_url.split("/")[-1] if file_url else "Unknown"
+            except (AttributeError, IndexError):
+                file_name = "Unknown"
+        
+        enhanced_job = {
+            'id': str(processing_request.id),
+            'job_id': str(processing_request.id),  # For compatibility with template
+            'file_name': file_name,
+            'file_url': file_url or "",
+            'status': overall_status,
+            'created_at': processing_request.created_at,
+            'completed_at': processing_request.completed_at,
+            'processing_time': total_processing_time,
+            'processing_request': processing_request,
+            'document': document,
+            'ai_results': job_ai_results,
+            'metadata_result': next((r for r in job_ai_results if r.processing_type == 'metadata'), None),
+            'references_result': next((r for r in job_ai_results if r.processing_type == 'references'), None),
+            'error_results': [r for r in job_ai_results if r.processing_type == 'processing_error'],
+        }
+        enhanced_jobs.append(enhanced_job)
     
     return templates.TemplateResponse(
         "dashboard/batch_detail.html",
         {
             "request": request,
             "batch": batch,
-            "jobs": jobs,
+            "jobs": enhanced_jobs,
             "user": current_user,
             "active_page": "batches"
         }
@@ -310,9 +451,9 @@ async def job_detail(
     """Job detail page"""
     # Get job with batch relationship eagerly loaded
     job_result = await db.execute(
-        select(ProcessingJob)
-        .options(joinedload(ProcessingJob.batch))
-        .where(ProcessingJob.job_id == job_id)
+        select(ProcessingRequest)
+        .options(joinedload(ProcessingRequest.batch))
+        .where(ProcessingRequest.job_id == job_id)
     )
     job = job_result.scalars().first()
     

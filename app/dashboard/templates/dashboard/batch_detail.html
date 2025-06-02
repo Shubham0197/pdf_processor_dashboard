@@ -115,31 +115,42 @@
     <!-- Files -->
     <div class="card mb-4">
         <div class="card-header">
-            <h5 class="card-title mb-0">Files</h5>
+            <h5 class="card-title mb-0">Processing Results</h5>
         </div>
         <div class="card-body">
             <div class="table-responsive">
                 <table class="table table-striped">
                     <thead>
                         <tr>
-                            <th>Job ID</th>
+                            <th>Request ID</th>
                             <th>File Name</th>
                             <th>Status</th>
                             <th>Created</th>
                             <th>Completed</th>
                             <th>Processing Time</th>
+                            <th>AI Results</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for job in jobs %}
                         <tr>
-                            <td>{{ job.job_id }}</td>
-                            <td>{{ job.file_name }}</td>
                             <td>
-                                <span class="badge bg-{{ 'warning' if job.status == 'pending' else 'info' if job.status == 'processing' else 'success' if job.status == 'completed' else 'danger' }}">
-                                    {{ job.status }}
+                                <small class="text-muted">{{ job.job_id[:8] }}...</small>
+                            </td>
+                            <td>
+                                <a href="{{ job.file_url }}" target="_blank" class="text-decoration-none">
+                                    {{ job.file_name }}
+                                    <i class="fas fa-external-link-alt ms-1 small"></i>
+                                </a>
+                            </td>
+                            <td>
+                                <span class="badge bg-{{ 'warning' if job.status == 'processing' else 'success' if job.status == 'completed' else 'warning' if job.status == 'partial_failure' else 'danger' }}">
+                                    {{ job.status.replace('_', ' ').title() }}
                                 </span>
+                                {% if job.error_results %}
+                                <i class="fas fa-exclamation-triangle text-warning ms-1" title="Has errors"></i>
+                                {% endif %}
                             </td>
                             <td>{{ job.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
                             <td>
@@ -157,9 +168,28 @@
                                 {% endif %}
                             </td>
                             <td>
-                                <a href="/dashboard/job/{{ job.job_id }}" class="btn btn-sm btn-info">
+                                <div class="d-flex gap-1">
+                                    {% if job.metadata_result %}
+                                    <span class="badge bg-{{ 'success' if job.metadata_result.status == 'completed' else 'danger' }}" title="Metadata">
+                                        M
+                                    </span>
+                                    {% endif %}
+                                    {% if job.references_result %}
+                                    <span class="badge bg-{{ 'success' if job.references_result.status == 'completed' else 'danger' }}" title="References">
+                                        R
+                                    </span>
+                                    {% endif %}
+                                    {% if job.error_results %}
+                                    <span class="badge bg-danger" title="Errors">
+                                        E
+                                    </span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-info" onclick="viewJobDetails('{{ job.job_id }}')">
                                     <i class="fas fa-eye"></i> View
-                                </a>
+                                </button>
                             </td>
                         </tr>
                         {% endfor %}
@@ -168,6 +198,140 @@
             </div>
         </div>
     </div>
+    
+    <!-- AI Processing Results Details (Expandable) -->
+    {% for job in jobs %}
+    <div class="card mb-4" id="job-details-{{ job.job_id }}" style="display: none;">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                Processing Details: {{ job.file_name }}
+                <button class="btn btn-sm btn-outline-secondary float-end" onclick="hideJobDetails('{{ job.job_id }}')">
+                    <i class="fas fa-times"></i> Close
+                </button>
+            </h5>
+        </div>
+        <div class="card-body">
+            <!-- Processing Request Info -->
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <strong>Request ID:</strong> {{ job.job_id }}<br>
+                    <strong>Request Type:</strong> {{ job.processing_request.request_type }}<br>
+                    <strong>Operations:</strong> 
+                    <code>{{ job.processing_request.requested_operations|tojson }}</code>
+                </div>
+                <div class="col-md-6">
+                    <strong>Document ID:</strong> {{ job.document.id }}<br>
+                    <strong>File URL:</strong> 
+                    <a href="{{ job.document.file_url }}" target="_blank">{{ job.document.file_url }}</a>
+                </div>
+            </div>
+
+            <!-- AI Results Tabs -->
+            <ul class="nav nav-tabs" id="aiResultTabs-{{ job.job_id }}" role="tablist">
+                {% if job.metadata_result %}
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="metadata-tab-{{ job.job_id }}" data-bs-toggle="tab" 
+                            data-bs-target="#metadata-{{ job.job_id }}" type="button" role="tab">
+                        Metadata 
+                        <span class="badge bg-{{ 'success' if job.metadata_result.status == 'completed' else 'danger' }} ms-1">
+                            {{ job.metadata_result.status }}
+                        </span>
+                    </button>
+                </li>
+                {% endif %}
+                {% if job.references_result %}
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link {{ 'active' if not job.metadata_result else '' }}" 
+                            id="references-tab-{{ job.job_id }}" data-bs-toggle="tab" 
+                            data-bs-target="#references-{{ job.job_id }}" type="button" role="tab">
+                        References
+                        <span class="badge bg-{{ 'success' if job.references_result.status == 'completed' else 'danger' }} ms-1">
+                            {{ job.references_result.status }}
+                        </span>
+                    </button>
+                </li>
+                {% endif %}
+                {% if job.error_results %}
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link {{ 'active' if not job.metadata_result and not job.references_result else '' }}" 
+                            id="errors-tab-{{ job.job_id }}" data-bs-toggle="tab" 
+                            data-bs-target="#errors-{{ job.job_id }}" type="button" role="tab">
+                        Errors
+                        <span class="badge bg-danger ms-1">{{ job.error_results|length }}</span>
+                    </button>
+                </li>
+                {% endif %}
+            </ul>
+
+            <div class="tab-content" id="aiResultTabContent-{{ job.job_id }}">
+                <!-- Metadata Tab -->
+                {% if job.metadata_result %}
+                <div class="tab-pane fade show active" id="metadata-{{ job.job_id }}" role="tabpanel">
+                    <div class="mt-3">
+                        <h6>Processed Result</h6>
+                        <div class="position-relative">
+                            <button class="btn btn-sm btn-outline-secondary copy-btn" data-target="#metadata-processed-{{ job.job_id }}">
+                                <i class="fas fa-copy"></i> Copy
+                            </button>
+                            <pre class="json" id="metadata-processed-{{ job.job_id }}">{{ job.metadata_result.processed_result|tojson(indent=2) }}</pre>
+                        </div>
+                        
+                        <h6 class="mt-4">Raw AI Response</h6>
+                        <div class="position-relative">
+                            <button class="btn btn-sm btn-outline-secondary copy-btn" data-target="#metadata-raw-{{ job.job_id }}">
+                                <i class="fas fa-copy"></i> Copy
+                            </button>
+                            <pre class="json" id="metadata-raw-{{ job.job_id }}">{{ job.metadata_result.raw_ai_response|tojson(indent=2) }}</pre>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- References Tab -->
+                {% if job.references_result %}
+                <div class="tab-pane fade {{ 'show active' if not job.metadata_result else '' }}" 
+                     id="references-{{ job.job_id }}" role="tabpanel">
+                    <div class="mt-3">
+                        <h6>Processed Result ({{ job.references_result.processed_result|length if job.references_result.processed_result is iterable else 0 }} references)</h6>
+                        <div class="position-relative">
+                            <button class="btn btn-sm btn-outline-secondary copy-btn" data-target="#references-processed-{{ job.job_id }}">
+                                <i class="fas fa-copy"></i> Copy
+                            </button>
+                            <pre class="json" id="references-processed-{{ job.job_id }}">{{ job.references_result.processed_result|tojson(indent=2) }}</pre>
+                        </div>
+                        
+                        <h6 class="mt-4">Raw AI Response</h6>
+                        <div class="position-relative">
+                            <button class="btn btn-sm btn-outline-secondary copy-btn" data-target="#references-raw-{{ job.job_id }}">
+                                <i class="fas fa-copy"></i> Copy
+                            </button>
+                            <pre class="json" id="references-raw-{{ job.job_id }}">{{ job.references_result.raw_ai_response|tojson(indent=2) }}</pre>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Errors Tab -->
+                {% if job.error_results %}
+                <div class="tab-pane fade {{ 'show active' if not job.metadata_result and not job.references_result else '' }}" 
+                     id="errors-{{ job.job_id }}" role="tabpanel">
+                    <div class="mt-3">
+                        {% for error in job.error_results %}
+                        <div class="alert alert-danger">
+                            <h6>Error #{{ loop.index }}</h6>
+                            <strong>Type:</strong> {{ error.error_type }}<br>
+                            <strong>Step:</strong> {{ error.error_step }}<br>
+                            <strong>Message:</strong> {{ error.error_message }}<br>
+                            <strong>Time:</strong> {{ error.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
     
     <!-- Webhook Response -->
     {% if batch.webhook_response %}
@@ -186,4 +350,50 @@
     </div>
     {% endif %}
 </div>
+
+<script>
+function viewJobDetails(jobId) {
+    document.getElementById('job-details-' + jobId).style.display = 'block';
+    // Scroll to the details
+    document.getElementById('job-details-' + jobId).scrollIntoView({ behavior: 'smooth' });
+}
+
+function hideJobDetails(jobId) {
+    document.getElementById('job-details-' + jobId).style.display = 'none';
+}
+
+// Copy functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const copyButtons = document.querySelectorAll('.copy-btn');
+    
+    copyButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const targetId = this.getAttribute('data-target');
+            const targetElement = document.querySelector(targetId);
+            
+            if (targetElement) {
+                // Create a temporary textarea to copy the text
+                const textarea = document.createElement('textarea');
+                textarea.value = targetElement.textContent;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                
+                // Show feedback
+                const originalText = this.innerHTML;
+                this.innerHTML = '<i class="fas fa-check"></i> Copied';
+                this.classList.add('btn-success');
+                this.classList.remove('btn-outline-secondary');
+                
+                setTimeout(() => {
+                    this.innerHTML = originalText;
+                    this.classList.remove('btn-success');
+                    this.classList.add('btn-outline-secondary');
+                }, 2000);
+            }
+        });
+    });
+});
+</script>
 {% endblock %}

@@ -119,6 +119,20 @@ class ReferencesResponse(BaseModel):
         # Otherwise, wrap it in a list
         return [v]
 
+class CompletePDFProcessingResult(BaseModel):
+    """Schema for the complete PDF processing result"""
+    file_url: str
+    raw_metadata_response: Optional[str] = None
+    raw_references_response: Optional[str] = None
+    extracted_text: Optional[str] = None
+    metadata: Optional[MetadataResponse] = None
+    references: List[Reference] = Field(default_factory=list)
+    processing_time: Optional[int] = None
+    error: Optional[str] = None
+
+    class Config:
+        # Allow extra fields to be included in the model
+        extra = 'ignore'
 
 class PDFProcessingResult(BaseModel):
     """Schema for the complete PDF processing result"""

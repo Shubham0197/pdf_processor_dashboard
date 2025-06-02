@@ -4,6 +4,7 @@ import re
 import io
 import base64
 import pathlib
+import time
 from google import genai
 from google.genai import client, types
 from opik import track
@@ -127,32 +128,41 @@ IMPORTANT: If you cannot extract some information, use null or empty arrays as a
                     ]
                     print("Sending PDF directly to Gemini API for metadata extraction")
                     print("📨 Sending to Gemini model...")
+                    start_time = time.time()
                     response = client.models.generate_content(model=model_name, contents=contents)
                     
                     # Store the complete raw response before parsing
-                    # Save more detailed information from the response
+                    # ALWAYS save the raw text first, then try to add additional details
+                    raw_response = {
+                        "text": response.text,
+                        "model": model_name,
+                        "processing_time_ms": int((time.time() - start_time) * 1000) if 'start_time' in locals() else 0,
+                        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.%fZ", time.gmtime()),
+                        "request_type": "metadata_extraction"
+                    }
+                    
+                    # Try to add detailed information from the response
                     try:
-                        raw_response = {
-                            "text": response.text,
-                            "model": model_name,
-                            "candidates": [{
-                                "content": getattr(candidate.content, "parts", [])[0].text if hasattr(candidate.content, "parts") and candidate.content.parts else "",
-                                "finish_reason": candidate.finish_reason,
-                                "safety_ratings": [{
-                                    "category": rating.category,
-                                    "probability": rating.probability
-                                } for rating in candidate.safety_ratings] if hasattr(candidate, "safety_ratings") else []
-                            } for candidate in response.candidates] if hasattr(response, "candidates") else [],
-                            "usage_metadata": {
-                                "prompt_token_count": getattr(response.usage_metadata, "prompt_token_count", 0) if hasattr(response, "usage_metadata") else 0,
-                                "candidates_token_count": getattr(response.usage_metadata, "candidates_token_count", 0) if hasattr(response, "usage_metadata") else 0,
-                                "total_token_count": getattr(response.usage_metadata, "total_token_count", 0) if hasattr(response, "usage_metadata") else 0
-                            } if hasattr(response, "usage_metadata") else {}
-                        }
+                        # if hasattr(response, "candidates") and response.candidates:
+                        #     raw_response["candidates"] = [{
+                        #         "content": getattr(candidate.content, "parts", [])[0].text if hasattr(candidate.content, "parts") and candidate.content.parts else "",
+                        #         "finish_reason": candidate.finish_reason,
+                        #         "safety_ratings": [{
+                        #             "category": rating.category,
+                        #             "probability": rating.probability
+                        #         } for rating in candidate.safety_ratings] if hasattr(candidate, "safety_ratings") else []
+                        #     } for candidate in response.candidates]
+                        
+                        if hasattr(response, "usage_metadata") and response.usage_metadata:
+                            raw_response["usage_metadata"] = {
+                                "prompt_token_count": getattr(response.usage_metadata, "prompt_token_count", 0),
+                                "candidates_token_count": getattr(response.usage_metadata, "candidates_token_count", 0),
+                                "total_token_count": getattr(response.usage_metadata, "total_token_count", 0)
+                            }
                     except Exception as e:
                         print(f"Error extracting detailed response info: {e}")
-                        # Fallback to simpler response format
-                        raw_response = {"text": response.text, "model": model_name}
+                        # Don't overwrite the raw_response, just add the error info
+                        raw_response["detail_extraction_error"] = str(e)
                         
                     results["raw_metadata_response"] = raw_response
                     
@@ -251,10 +261,43 @@ IMPORTANT: If you cannot extract some information, use null or empty arrays as a
                         ]
                         print("Sending PDF directly to Gemini API for references extraction")
                         print("📨 Sending to Gemini model...")
+                        start_time = time.time()
                         response = client.models.generate_content(model=model_name, contents=contents)
                         
-                        # Store the raw response before parsing
-                        results["raw_references_response"] = {"text": response.text}
+                        # Store the raw response before parsing - ALWAYS save the raw text first
+                        raw_response = {
+                            "text": response.text,
+                            "model": model_name,
+                            "extraction_mode": "regular",
+                            "processing_time_ms": int((time.time() - start_time) * 1000),
+                            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.%fZ", time.gmtime()),
+                            "request_type": "references_extraction"
+                        }
+                        
+                        # Try to add detailed information from the response
+                        try:
+                            # if hasattr(response, "candidates") and response.candidates:
+                            #     raw_response["candidates"] = [{
+                            #         "content": getattr(candidate.content, "parts", [])[0].text if hasattr(candidate.content, "parts") and candidate.content.parts else "",
+                            #         "finish_reason": candidate.finish_reason,
+                            #         "safety_ratings": [{
+                            #             "category": rating.category,
+                            #             "probability": rating.probability
+                            #         } for rating in candidate.safety_ratings] if hasattr(candidate, "safety_ratings") else []
+                            #     } for candidate in response.candidates]
+                            
+                            if hasattr(response, "usage_metadata") and response.usage_metadata:
+                                raw_response["usage_metadata"] = {
+                                    "prompt_token_count": getattr(response.usage_metadata, "prompt_token_count", 0),
+                                    "candidates_token_count": getattr(response.usage_metadata, "candidates_token_count", 0),
+                                    "total_token_count": getattr(response.usage_metadata, "total_token_count", 0)
+                                }
+                        except Exception as e:
+                            print(f"Error extracting detailed response info for references: {e}")
+                            # Don't overwrite the raw_response, just add the error info
+                            raw_response["detail_extraction_error"] = str(e)
+                        
+                        results["raw_references_response"] = raw_response
                         
                         # Parse the references response
                         references = await parse_gemini_response(response, is_metadata=False)
@@ -326,10 +369,43 @@ IMPORTANT: If you cannot extract some information, use null or empty arrays as a
                             initial_prompt
                         ]
                         print("📨 Sending initial request to Gemini model for references...")
+                        start_time = time.time()
                         response = client.models.generate_content(model=model_name, contents=contents)
                         
-                        # Store the raw response before parsing
-                        results["raw_references_response"] = {"text": response.text}
+                        # Store the raw response before parsing - ALWAYS save the raw text first
+                        raw_response = {
+                            "text": response.text,
+                            "model": model_name,
+                            "extraction_mode": "initial",
+                            "processing_time_ms": int((time.time() - start_time) * 1000),
+                            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.%fZ", time.gmtime()),
+                            "request_type": "references_extraction_complete"
+                        }
+                        
+                        # Try to add detailed information from the response
+                        try:
+                            # if hasattr(response, "candidates") and response.candidates:
+                            #     raw_response["candidates"] = [{
+                            #         "content": getattr(candidate.content, "parts", [])[0].text if hasattr(candidate.content, "parts") and candidate.content.parts else "",
+                            #         "finish_reason": candidate.finish_reason,
+                            #         "safety_ratings": [{
+                            #             "category": rating.category,
+                            #             "probability": rating.probability
+                            #         } for rating in candidate.safety_ratings] if hasattr(candidate, "safety_ratings") else []
+                            #     } for candidate in response.candidates]
+                            
+                            if hasattr(response, "usage_metadata") and response.usage_metadata:
+                                raw_response["usage_metadata"] = {
+                                    "prompt_token_count": getattr(response.usage_metadata, "prompt_token_count", 0),
+                                    "candidates_token_count": getattr(response.usage_metadata, "candidates_token_count", 0),
+                                    "total_token_count": getattr(response.usage_metadata, "total_token_count", 0)
+                                }
+                        except Exception as e:
+                            print(f"Error extracting detailed response info for references: {e}")
+                            # Don't overwrite the raw_response, just add the error info
+                            raw_response["detail_extraction_error"] = str(e)
+                        
+                        results["raw_references_response"] = raw_response
                         
                         # Parse the initial response
                         all_references = []
@@ -480,10 +556,43 @@ IMPORTANT: If you cannot extract some information, use null or empty arrays as a
                     contents = [uploaded_file, references_prompt]
                     print("Sending PDF directly to Gemini API for references extraction")
                     print("📨 Sending to Gemini model...")
+                    start_time = time.time()
                     response = client.models.generate_content(model=model_name, contents=contents)
                     
-                    # Store the raw response before parsing
-                    results["raw_references_response"] = {"text": response.text}
+                    # Store the raw response before parsing - ALWAYS save the raw text first
+                    raw_response = {
+                        "text": response.text,
+                        "model": model_name,
+                        "extraction_mode": "regular",
+                        "processing_time_ms": int((time.time() - start_time) * 1000),
+                        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.%fZ", time.gmtime()),
+                        "request_type": "references_extraction"
+                    }
+                    
+                    # Try to add detailed information from the response
+                    try:
+                        # if hasattr(response, "candidates") and response.candidates:
+                        #     raw_response["candidates"] = [{
+                        #         "content": getattr(candidate.content, "parts", [])[0].text if hasattr(candidate.content, "parts") and candidate.content.parts else "",
+                        #         "finish_reason": candidate.finish_reason,
+                        #         "safety_ratings": [{
+                        #             "category": rating.category,
+                        #             "probability": rating.probability
+                        #         } for rating in candidate.safety_ratings] if hasattr(candidate, "safety_ratings") else []
+                        #     } for candidate in response.candidates]
+                        
+                        if hasattr(response, "usage_metadata") and response.usage_metadata:
+                            raw_response["usage_metadata"] = {
+                                "prompt_token_count": getattr(response.usage_metadata, "prompt_token_count", 0),
+                                "candidates_token_count": getattr(response.usage_metadata, "candidates_token_count", 0),
+                                "total_token_count": getattr(response.usage_metadata, "total_token_count", 0)
+                            }
+                    except Exception as e:
+                        print(f"Error extracting detailed response info for references: {e}")
+                        # Don't overwrite the raw_response, just add the error info
+                        raw_response["detail_extraction_error"] = str(e)
+                    
+                    results["raw_references_response"] = raw_response
                     
                     references = await parse_gemini_response(response, is_metadata=False)
                     results["references"] = references

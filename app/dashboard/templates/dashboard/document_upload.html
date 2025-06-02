@@ -2,6 +2,386 @@
 
 {% block title %}Upload Document{% endblock %}
 
+{% block extra_css %}
+<style>
+    /* Enhanced Processing UI Styles */
+    .processing-container {
+        display: none;
+        margin-top: 30px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 8px;
+        padding: 30px;
+        text-align: center;
+    }
+    .processing-container.visible {
+        display: block;
+    }
+    .processing-title {
+        font-size: 24px;
+        font-weight: 600;
+        margin-bottom: 20px;
+    }
+    .progress-steps {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 30px;
+        flex-wrap: wrap;
+        gap: 15px;
+    }
+    .step {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-width: 120px;
+        padding: 15px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.1);
+        transition: all 0.3s ease;
+    }
+    .step.active {
+        background: rgba(255, 255, 255, 0.2);
+        transform: scale(1.05);
+    }
+    .step.completed {
+        background: rgba(46, 204, 113, 0.3);
+    }
+    .step.failed {
+        background: rgba(231, 76, 60, 0.3);
+    }
+    .step-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 10px;
+        font-size: 18px;
+        background: rgba(255, 255, 255, 0.2);
+        transition: all 0.3s ease;
+    }
+    .step.active .step-icon {
+        background: rgba(255, 255, 255, 0.4);
+        animation: pulse 2s infinite;
+    }
+    .step.completed .step-icon {
+        background: #2ecc71;
+    }
+    .step.failed .step-icon {
+        background: #e74c3c;
+    }
+    @keyframes pulse {
+        0% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.1); opacity: 0.7; }
+        100% { transform: scale(1); opacity: 1; }
+    }
+    .step-label {
+        font-size: 14px;
+        font-weight: 500;
+    }
+    .overall-progress {
+        margin-top: 20px;
+    }
+    .progress-bar-custom {
+        width: 100%;
+        height: 8px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 4px;
+        overflow: hidden;
+        margin-bottom: 10px;
+    }
+    .progress-fill {
+        height: 100%;
+        background: #2ecc71;
+        border-radius: 4px;
+        transition: width 0.5s ease;
+        width: 0%;
+    }
+    .progress-text {
+        font-size: 16px;
+        font-weight: 500;
+    }
+
+    /* Results Container Styles */
+    .results-container {
+        display: none;
+        margin-top: 30px;
+    }
+    .results-container.visible {
+        display: block !important;
+    }
+    .results-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        gap: 15px;
+    }
+    .results-title {
+        font-size: 24px;
+        font-weight: 600;
+        color: #333;
+    }
+
+    /* Action Buttons */
+    .action-buttons {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+    .action-btn {
+        background-color: #27ae60;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 10px 20px;
+        font-size: 14px;
+        cursor: pointer;
+        transition: background-color 0.3s;
+    }
+    .action-btn:hover {
+        background-color: #219653;
+    }
+    .dashboard-btn {
+        background-color: #3498db;
+    }
+    .dashboard-btn:hover {
+        background-color: #2980b9;
+    }
+    .retry-btn {
+        background-color: #f39c12;
+    }
+    .retry-btn:hover {
+        background-color: #e67e22;
+    }
+
+    /* JSON Output */
+    .json-output {
+        background-color: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 4px;
+        padding: 15px;
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+        max-height: 500px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+    }
+
+    /* Content Viewers */
+    .content-viewer {
+        background-color: #f8f9fa;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        padding: 20px;
+        max-height: 600px;
+        overflow: auto;
+        font-family: 'Courier New', Courier, monospace;
+        white-space: pre-wrap;
+        line-height: 1.5;
+    }
+    .content-viewer.json {
+        font-size: 14px;
+    }
+    .content-viewer.metadata {
+        font-family: inherit;
+        white-space: normal;
+    }
+
+    /* Metadata Display */
+    .metadata-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+        margin-bottom: 20px;
+    }
+    .metadata-section {
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        padding: 15px;
+    }
+    .metadata-section h4 {
+        margin: 0 0 10px 0;
+        color: #4a6cf7;
+        font-size: 16px;
+    }
+    .metadata-item {
+        margin-bottom: 8px;
+    }
+    .metadata-label {
+        font-weight: 600;
+        color: #555;
+    }
+    .metadata-value {
+        color: #333;
+        margin-left: 5px;
+    }
+
+    /* References Display */
+    .references-list {
+        display: grid;
+        gap: 15px;
+    }
+    .reference-item {
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        padding: 15px;
+        border-left: 4px solid #4a6cf7;
+    }
+    .reference-number {
+        background: #4a6cf7;
+        color: white;
+        width: 25px;
+        height: 25px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: bold;
+        margin-right: 10px;
+    }
+    .reference-text {
+        display: inline;
+        line-height: 1.6;
+    }
+
+    /* Error Styles */
+    .error-message {
+        color: #e74c3c;
+        margin-top: 10px;
+        padding: 15px;
+        background-color: #fadbd8;
+        border-radius: 6px;
+        border-left: 4px solid #e74c3c;
+        display: none;
+    }
+    .error-message.visible {
+        display: block;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 768px) {
+        .progress-steps {
+            flex-direction: column;
+            align-items: center;
+        }
+        .results-header {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        .action-buttons {
+            flex-direction: column;
+        }
+    }
+
+    .result-summary-card {
+        background: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        overflow: hidden;
+    }
+    
+    .summary-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 15px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .summary-header h4 {
+        margin: 0;
+        font-size: 18px;
+    }
+    
+    .summary-content {
+        padding: 20px;
+    }
+    
+    .summary-item {
+        margin-bottom: 12px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    
+    .summary-item:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+    }
+    
+    .result-breakdown {
+        margin-top: 15px;
+        padding-top: 15px;
+        border-top: 2px solid #f0f0f0;
+    }
+    
+    .result-breakdown h5 {
+        margin-bottom: 10px;
+        color: #333;
+        font-size: 16px;
+    }
+    
+    .breakdown-item {
+        padding: 8px 0;
+        border-bottom: 1px solid #f8f9fa;
+    }
+    
+    .breakdown-item:last-child {
+        border-bottom: none;
+    }
+    
+    .error-text {
+        color: #dc3545;
+        font-size: 12px;
+        font-style: italic;
+        margin-left: 10px;
+    }
+    
+    .tabs {
+        display: flex;
+        background-color: #f8f9fa;
+        border-bottom: 1px solid #e9ecef;
+        margin-bottom: 20px;
+    }
+    
+    .tab {
+        padding: 12px 20px;
+        cursor: pointer;
+        border-bottom: 3px solid transparent;
+        transition: all 0.3s ease;
+        color: #6c757d;
+    }
+    
+    .tab:hover {
+        background-color: #e9ecef;
+        color: #495057;
+    }
+    
+    .tab.active {
+        color: #007bff;
+        border-bottom-color: #007bff;
+        background-color: white;
+    }
+    
+    .tab-panel {
+        display: none;
+    }
+    
+    .tab-panel.active {
+        display: block !important;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid py-4">
     <div class="row">
@@ -14,7 +394,7 @@
                     </a>
                 </div>
                 <div class="card-body">
-                    <form method="POST">
+                    <form id="upload-form">
                         <div class="row mb-4">
                             <div class="col-md-12">
                                 <div class="mb-3">
@@ -54,7 +434,7 @@
                                         <div class="form-check form-switch mb-3">
                                             <input class="form-check-input" type="checkbox" name="complete_references" id="complete_references">
                                             <label class="form-check-label" for="complete_references">Complete References</label>
-                                            <p class="text-xs text-secondary mb-0">Attempt to complete partial reference information.</p>
+                                            <p class="text-xs text-secondary mb-0">Use enhanced AI processing for extensive reference lists.</p>
                                         </div>
                                     </div>
                                 </div>
@@ -75,15 +455,542 @@
 
                         <div class="row">
                             <div class="col-md-12 text-center">
-                                <button type="submit" class="btn btn-primary">
+                                <button type="submit" id="upload-btn" class="btn btn-primary">
                                     <i class="fas fa-upload me-1"></i> Upload and Process
                                 </button>
                             </div>
                         </div>
                     </form>
+
+                    <div class="error-message" id="error-message"></div>
+                </div>
+            </div>
+
+            <!-- Processing Progress Container -->
+            <div class="card processing-container" id="processing-container">
+                <div class="processing-title">Processing Your Document</div>
+                <div class="progress-steps" id="progress-steps">
+                    <div class="step" id="step-submit">
+                        <div class="step-icon">📝</div>
+                        <div class="step-label">Submitting Job</div>
+                    </div>
+                    <div class="step" id="step-download">
+                        <div class="step-icon">⬇️</div>
+                        <div class="step-label">Downloading PDF</div>
+                    </div>
+                    <div class="step" id="step-metadata">
+                        <div class="step-icon">🔍</div>
+                        <div class="step-label">Extracting Metadata</div>
+                    </div>
+                    <div class="step" id="step-references">
+                        <div class="step-icon">📚</div>
+                        <div class="step-label">Extracting References</div>
+                    </div>
+                    <div class="step" id="step-complete">
+                        <div class="step-icon">✅</div>
+                        <div class="step-label">Complete</div>
+                    </div>
+                </div>
+                <div class="overall-progress">
+                    <div class="progress-bar-custom">
+                        <div class="progress-fill" id="progress-fill"></div>
+                    </div>
+                    <div class="progress-text" id="progress-text">Initializing...</div>
+                </div>
+            </div>
+
+            <!-- Results Container -->
+            <div class="card results-container" id="results-container">
+                <div class="card-header">
+                    <div class="results-header">
+                        <div class="results-title">Processing Results</div>
+                        <div>
+                            <span class="badge status-badge" id="status-badge">completed</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="action-buttons">
+                        <button id="copy-json-btn" class="action-btn">
+                            <i class="fas fa-copy me-1"></i> Copy JSON
+                        </button>
+                        <button id="save-json-btn" class="action-btn">
+                            <i class="fas fa-download me-1"></i> Save as JSON
+                        </button>
+                        <button id="view-dashboard-btn" class="action-btn dashboard-btn" style="display: none;">
+                            <i class="fas fa-external-link-alt me-1"></i> View Details
+                        </button>
+                        <button id="retry-btn" class="action-btn retry-btn" style="display: none;">
+                            <i class="fas fa-redo me-1"></i> Process Another
+                        </button>
+                    </div>
+
+                    <div class="results-content">
+                        <h5><i class="fas fa-code me-2"></i>Complete JSON Results</h5>
+                        <pre id="json-results" class="json-output"></pre>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<script>
+    // Global variables
+    let currentProcessingId = null;
+    let currentDocumentId = null;
+    let processingInterval = null;
+    let progressSteps = ['submit', 'download', 'metadata', 'references', 'complete'];
+    let currentStep = 0;
+
+    // Initialize the page
+    document.addEventListener('DOMContentLoaded', function() {
+        setupEventListeners();
+    });
+
+    function setupEventListeners() {
+        // Form submission
+        document.getElementById('upload-form').addEventListener('submit', startProcessing);
+        
+        // Action buttons
+        document.getElementById('copy-json-btn').addEventListener('click', copyJson);
+        document.getElementById('save-json-btn').addEventListener('click', saveJson);
+        document.getElementById('retry-btn').addEventListener('click', resetForm);
+        
+        // Tab navigation
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.addEventListener('click', function() {
+                switchTab(this.dataset.tab);
+            });
+        });
+    }
+
+    async function startProcessing(e) {
+        e.preventDefault();
+        
+        const form = e.target;
+        const formData = new FormData(form);
+        const errorMessage = document.getElementById('error-message');
+        
+        // Reset UI
+        errorMessage.textContent = '';
+        errorMessage.classList.remove('visible');
+        document.getElementById('results-container').classList.remove('visible');
+        
+        // Validate URL
+        const documentUrl = formData.get('document_url');
+        if (!documentUrl) {
+            showError('Please enter a PDF URL');
+            return;
+        }
+        
+        // Disable submit button
+        const uploadBtn = document.getElementById('upload-btn');
+        uploadBtn.disabled = true;
+        uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Processing...';
+        
+        try {
+            // Show processing container
+            document.getElementById('processing-container').classList.add('visible');
+            
+            // Start processing animation
+            startProgressAnimation();
+            
+            // Submit processing request
+            updateProgress(10, 'Submitting processing request...');
+            
+            const response = await fetch('/dashboard/documents/upload', {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams(formData)
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ detail: 'Failed to process document' }));
+                throw new Error(errorData.detail || 'Failed to process document');
+            }
+            
+            const processData = await response.json();
+            currentProcessingId = processData.id;
+            currentDocumentId = processData.document_id;
+            
+            // Start polling for progress
+            await pollProcessingStatus(currentProcessingId);
+            
+        } catch (error) {
+            showError(error.message);
+            resetProcessingState();
+        }
+    }
+
+    function startProgressAnimation() {
+        currentStep = 0;
+        updateStepUI(0, 'active');
+    }
+
+    function updateProgress(percentage, message) {
+        document.getElementById('progress-fill').style.width = percentage + '%';
+        document.getElementById('progress-text').textContent = message;
+    }
+
+    function updateStepUI(stepIndex, status) {
+        if (stepIndex >= 0 && stepIndex < progressSteps.length) {
+            const step = document.getElementById(`step-${progressSteps[stepIndex]}`);
+            if (step) {
+                step.className = `step ${status}`;
+            }
+        }
+    }
+
+    async function pollProcessingStatus(processingId) {
+        console.log('🔄 Starting to poll processing status for:', processingId);
+        let pollCount = 0;
+        const maxPolls = 60; // 5 minutes max
+        
+        const poll = async () => {
+            pollCount++;
+            console.log(`📡 Poll #${pollCount} for processing ID: ${processingId}`);
+            
+            try {
+                const response = await fetch(`/api/v1/processing/${processingId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'same-origin' // Include cookies for authentication
+                });
+                
+                console.log('📡 API Response status:', response.status);
+                
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        console.error('❌ Authentication failed');
+                        showError('Authentication failed. Please refresh the page and try again.');
+                        return;
+                    }
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const statusData = await response.json();
+                console.log('📊 Processing status data:', statusData);
+                
+                if (statusData.status === 'completed') {
+                    console.log('✅ Processing completed!');
+                    console.log('🎯 About to call showResults with:', statusData);
+                    try {
+                        await showResults(statusData);
+                        console.log('🎊 showResults call completed successfully');
+                    } catch (error) {
+                        console.error('❌ Error in showResults:', error);
+                    }
+                    return; // Stop polling
+                } else if (statusData.status === 'failed') {
+                    console.log('❌ Processing failed:', statusData.error_message);
+                    showError(statusData.error_message || 'Processing failed');
+                    return; // Stop polling
+                } else if (statusData.status === 'processing') {
+                    console.log('⏳ Still processing...');
+                    updateProcessingProgress(statusData);
+                    
+                    // Continue polling if not max attempts
+                    if (pollCount < maxPolls) {
+                        setTimeout(poll, 5000); // Poll every 5 seconds
+                    } else {
+                        console.log('⏰ Max polling attempts reached');
+                        showError('Processing is taking longer than expected. Please check back later.');
+                    }
+                } else {
+                    console.log(`ℹ️ Unknown status: ${statusData.status}`);
+                    // Continue polling for unknown status
+                    if (pollCount < maxPolls) {
+                        setTimeout(poll, 5000);
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Error polling status:', error);
+                if (pollCount < maxPolls) {
+                    console.log('🔄 Retrying in 5 seconds...');
+                    setTimeout(poll, 5000); // Retry after error
+                } else {
+                    showError('Failed to check processing status. Please refresh the page.');
+                }
+            }
+        };
+        
+        // Start polling immediately
+        poll();
+    }
+
+    async function showResults(statusData) {
+        console.log('🎉 showResults called with data:', statusData);
+        
+        // Hide processing container
+        const processingContainer = document.getElementById('processing-container');
+        console.log('🔄 Hiding processing container:', processingContainer);
+        processingContainer.classList.remove('visible');
+        
+        // Show results container
+        const resultsContainer = document.getElementById('results-container');
+        console.log('✅ Showing results container:', resultsContainer);
+        resultsContainer.classList.add('visible');
+        
+        // Force display for debugging
+        resultsContainer.style.display = 'block';
+        console.log('🔧 Forced results container display');
+        
+        // Update status badge
+        const statusBadge = document.getElementById('status-badge');
+        statusBadge.textContent = statusData.status;
+        statusBadge.className = `badge status-badge status-${statusData.status}`;
+        console.log('🏷️ Updated status badge to:', statusData.status);
+        
+        // Extract metadata and references from results
+        let metadata = null;
+        let references = [];
+        
+        console.log('📊 Processing results:', statusData.results);
+        if (statusData.results) {
+            statusData.results.forEach(result => {
+                console.log(`📋 Processing result type: ${result.processing_type}`);
+                if (result.processing_type === 'metadata' && result.processed_result) {
+                    metadata = result.processed_result;
+                    console.log('📋 Found metadata:', metadata);
+                } else if (result.processing_type === 'references' && result.processed_result) {
+                    references = Array.isArray(result.processed_result) ? result.processed_result : [];
+                    console.log('📚 Found references:', references.length, 'items');
+                }
+            });
+        }
+        
+        // Prepare complete results object in the standard format
+        const completeResults = {
+            extracted_text: null, // Always null for this implementation
+            metadata: metadata,
+            references: references
+        };
+        
+        console.log('📦 Complete results object:', completeResults);
+        
+        // Display complete JSON results
+        console.log('💾 Setting JSON results...');
+        const jsonElement = document.getElementById('json-results');
+        if (jsonElement) {
+            jsonElement.textContent = JSON.stringify(completeResults, null, 2);
+            console.log('✅ JSON results set successfully, length:', jsonElement.textContent.length);
+        } else {
+            console.error('❌ json-results element not found');
+        }
+        
+        // Show action buttons
+        if (currentDocumentId) {
+            const dashboardBtn = document.getElementById('view-dashboard-btn');
+            if (dashboardBtn) {
+                dashboardBtn.style.display = 'inline-block';
+                dashboardBtn.onclick = function() {
+                    window.location.href = `/dashboard/documents/${currentDocumentId}`;
+                };
+                console.log('🔗 Dashboard button configured');
+            }
+        }
+        
+        // Show retry button
+        const retryBtn = document.getElementById('retry-btn');
+        if (retryBtn) {
+            retryBtn.style.display = 'inline-block';
+            console.log('🔄 Retry button shown');
+        }
+        
+        // Reset form state
+        console.log('🧹 Resetting processing state...');
+        resetProcessingState();
+        
+        console.log('🎊 showResults completed successfully!');
+    }
+
+    function copyJson() {
+        const jsonContent = document.getElementById('json-results').textContent;
+        if (jsonContent) {
+            copyToClipboard(jsonContent);
+        } else {
+            alert('No JSON content to copy');
+        }
+    }
+
+    function saveJson() {
+        const jsonContent = document.getElementById('json-results').textContent;
+        const documentUrl = document.getElementById('document_url').value.trim();
+        
+        if (jsonContent) {
+            const filename = getFilenameFromUrl(documentUrl) + '.json';
+            downloadFile(jsonContent, filename, 'application/json');
+        } else {
+            alert('No JSON content to save');
+        }
+    }
+
+    function resetForm() {
+        // Reset form
+        document.getElementById('upload-form').reset();
+        document.getElementById('processing-container').classList.remove('visible');
+        document.getElementById('results-container').classList.remove('visible');
+        document.getElementById('error-message').classList.remove('visible');
+        
+        // Reset progress
+        currentStep = 0;
+        document.querySelectorAll('.step').forEach(step => step.className = 'step');
+        document.getElementById('progress-fill').style.width = '0%';
+        
+        // Reset variables
+        currentProcessingId = null;
+        currentDocumentId = null;
+        
+        // Clear any intervals
+        if (processingInterval) {
+            clearInterval(processingInterval);
+            processingInterval = null;
+        }
+        
+        // Reset submit button
+        resetProcessingState();
+    }
+
+    function resetProcessingState() {
+        currentProcessingId = null;
+        currentStep = 0;
+        
+        // Reset form
+        const submitBtn = document.querySelector('button[type="submit"]');
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fas fa-play"></i> Process Document';
+        }
+        
+        // Hide processing container
+        document.getElementById('processing-container').classList.remove('visible');
+    }
+
+    function showError(message) {
+        console.error('❌ Error:', message);
+        
+        // Hide processing container
+        document.getElementById('processing-container').classList.remove('visible');
+        
+        // Show error message
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'alert alert-danger';
+        errorDiv.innerHTML = `
+            <strong>Error:</strong> ${message}
+            <button type="button" class="btn btn-secondary btn-sm float-right" onclick="location.reload()">
+                <i class="fas fa-refresh"></i> Retry
+            </button>
+        `;
+        
+        // Insert error message after the form
+        const form = document.querySelector('form');
+        form.parentNode.insertBefore(errorDiv, form.nextSibling);
+        
+        // Reset form state
+        resetProcessingState();
+    }
+
+    // Utility functions
+    function getFilenameFromUrl(url) {
+        try {
+            const pathname = new URL(url).pathname;
+            const filename = pathname.split('/').pop().split('.')[0];
+            return filename || 'document';
+        } catch (e) {
+            return 'document';
+        }
+    }
+
+    function copyToClipboard(text) {
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(text)
+                .then(() => alert('Content copied to clipboard!'))
+                .catch(() => fallbackCopy(text));
+        } else {
+            fallbackCopy(text);
+        }
+    }
+
+    function fallbackCopy(text) {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        
+        try {
+            const successful = document.execCommand('copy');
+            if (successful) {
+                alert('Content copied to clipboard!');
+            } else {
+                alert('Failed to copy content');
+            }
+        } catch (err) {
+            alert('Failed to copy content');
+        }
+        
+        document.body.removeChild(textArea);
+    }
+
+    function downloadFile(content, filename, mimeType) {
+        const blob = new Blob([content], {type: mimeType});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    function getResultIcon(processingType) {
+        const icons = {
+            'metadata': '📋',
+            'references': '📚',
+            'full_text': '📄',
+            'entities': '🏷️',
+            'classification': '🔍'
+        };
+        return icons[processingType] || '📊';
+    }
+
+    function updateProcessingProgress(statusData) {
+        // Update progress based on what's been completed
+        let progress = 20; // Base progress
+        let message = 'Processing document...';
+        
+        if (statusData.results && statusData.results.length > 0) {
+            const completedResults = statusData.results.filter(r => r.status === 'completed');
+            progress = 20 + (completedResults.length * 30); // 30% per completed result
+            
+            if (completedResults.length > 0) {
+                const lastCompleted = completedResults[completedResults.length - 1];
+                message = `Completed ${lastCompleted.processing_type}...`;
+                
+                // Update step UI
+                if (lastCompleted.processing_type === 'metadata') {
+                    updateStepUI(1, 'completed');
+                    updateStepUI(2, 'active');
+                }
+                if (lastCompleted.processing_type === 'references') {
+                    updateStepUI(2, 'completed');
+                    updateStepUI(3, 'active');
+                }
+            }
+        }
+        
+        updateProgress(progress, message);
+    }
+</script>
 {% endblock %}

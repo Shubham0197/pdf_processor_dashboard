@@ -41,6 +41,22 @@ async def process_document(
         Tuple of (ProcessingRequest, list of AIProcessingResults)
     """
     start_time = time.time()
+    # if batch_id is not provided, create a new batch
+    if batch_id is None:
+        # create the batch
+        batch = BatchJob(
+            status="processing",
+            created_at=datetime.now(),
+            completed_at=None,
+            total_files=1,
+            processed_files=0,
+            failed_files=0,
+            # user_id=user_id, should be there #todo will cork on it later
+            source="single_pdf"
+        )
+        db.add(batch)
+        await db.flush()
+        batch_id = batch.id
     
     # Default options if not provided
     if options is None:
@@ -84,22 +100,49 @@ async def process_document(
     
     # Step 4: Process the PDF
     try:
+        print(f"🐛 DEBUG: About to call process_pdf with options: {options}")
         # Use the existing process_pdf service
         result = await process_pdf(file_url, db, options)
+        
+        print(f"🐛 DEBUG: process_pdf returned result with keys: {list(result.keys()) if isinstance(result, dict) else 'Not a dict'}")
+        print(f"🐛 DEBUG: result has raw_metadata_response: {'raw_metadata_response' in result}")
+        print(f"🐛 DEBUG: result has raw_references_response: {'raw_references_response' in result}")
         
         # Step 5: Save processing results
         ai_results = []
         
         # Metadata processing result
         if options.get("extract_metadata", True):
-            # Ensure raw_metadata_response is a complete object including model info
-            raw_metadata = {
-                "text": result.get("raw_metadata_response", {}).get("text", "No raw response available"),
-                "model": result.get("model", "gemini-pro"),
-                "processing_time_ms": int((time.time() - start_time) * 1000),
-                "timestamp": datetime.now().isoformat(),
-                "request_type": "metadata_extraction"
-            }
+            print(f"🐛 DEBUG: Processing metadata results...")
+            # Get the complete raw metadata response from gemini service
+            raw_metadata_response = result.get("raw_metadata_response", {})
+            print(f"🐛 DEBUG: raw_metadata_response type: {type(raw_metadata_response)}")
+            print(f"🐛 DEBUG: raw_metadata_response keys: {list(raw_metadata_response.keys()) if isinstance(raw_metadata_response, dict) else 'Not a dict'}")
+            print(f"🐛 DEBUG: raw_metadata_response has text: {'text' in raw_metadata_response if isinstance(raw_metadata_response, dict) else False}")
+            # If we have a complete raw response, use it; otherwise create a basic one
+            if isinstance(raw_metadata_response, dict) and "text" in raw_metadata_response:
+                print(f"🐛 DEBUG: ✅ Using complete raw metadata response with text length: {len(raw_metadata_response['text'])}")
+                raw_metadata = raw_metadata_response.copy()
+                # Add processing context
+                raw_metadata.update({
+                    "processing_time_ms": int((time.time() - start_time) * 1000),
+                    "timestamp": datetime.now().isoformat(),
+                    "request_type": "metadata_extraction",
+                    "processing_service": "enhanced_processing_service"
+                })
+            else:
+                print(f"🐛 DEBUG: ❌ Using fallback raw metadata response")
+                # Fallback for legacy responses
+                raw_metadata = {
+                    "text": raw_metadata_response.get("text", "No raw response available") if isinstance(raw_metadata_response, dict) else str(raw_metadata_response),
+                    "model": result.get("model", "gemini-pro"),
+                    "processing_time_ms": int((time.time() - start_time) * 1000),
+                    "timestamp": datetime.now().isoformat(),
+                    "request_type": "metadata_extraction",
+                    "processing_service": "enhanced_processing_service"
+                }
+            
+            print(f"🐛 DEBUG: Final raw_metadata text length: {len(raw_metadata.get('text', ''))}")
             
             metadata_result = AIProcessingResult(
                 processing_request_id=processing_request.id,
@@ -111,24 +154,51 @@ async def process_document(
                 processed_result=result.get("metadata"),
                 error_message=result.get("metadata", {}).get("error") if isinstance(result.get("metadata"), dict) else None,
                 error_type="ai_error" if "error" in result.get("metadata", {}) else None,
-                ai_model_used=result.get("model", "gemini-pro")
+                ai_model_used=raw_metadata.get("model", result.get("model", "gemini-pro")),
+                ai_tokens_used=raw_metadata.get("usage_metadata", {}).get("total_token_count", 0) if isinstance(raw_metadata.get("usage_metadata"), dict) else 0
             )
             db.add(metadata_result)
             ai_results.append(metadata_result)
+            print(f"🐛 DEBUG: ✅ Added metadata_result to database")
             
         # References processing result
         if options.get("extract_references", True):
-            # Ensure raw_references_response is a complete object including model info
-            raw_references = {
-                "text": result.get("raw_references_response", {}).get("text", "No raw response available"),
-                "model": result.get("model", "gemini-pro"),
-                "processing_time_ms": int((time.time() - start_time) * 1000),
-                "timestamp": datetime.now().isoformat(),
-                "request_type": "references_extraction",
-                "extraction_options": {
-                    "complete_references": options.get("complete_references", False)
+            print(f"🐛 DEBUG: Processing references results...")
+            # Get the complete raw references response from gemini service
+            raw_references_response = result.get("raw_references_response", {})
+            print(f"🐛 DEBUG: raw_references_response type: {type(raw_references_response)}")
+            print(f"🐛 DEBUG: raw_references_response keys: {list(raw_references_response.keys()) if isinstance(raw_references_response, dict) else 'Not a dict'}")
+            print(f"🐛 DEBUG: raw_references_response has text: {'text' in raw_references_response if isinstance(raw_references_response, dict) else False}")
+            # If we have a complete raw response, use it; otherwise create a basic one
+            if isinstance(raw_references_response, dict) and "text" in raw_references_response:
+                print(f"🐛 DEBUG: ✅ Using complete raw references response with text length: {len(raw_references_response['text'])}")
+                raw_references = raw_references_response.copy()
+                # Add processing context
+                raw_references.update({
+                    "processing_time_ms": int((time.time() - start_time) * 1000),
+                    "timestamp": datetime.now().isoformat(),
+                    "request_type": "references_extraction",
+                    "processing_service": "enhanced_processing_service",
+                    "extraction_options": {
+                        "complete_references": options.get("complete_references", False)
+                    }
+                })
+            else:
+                print(f"🐛 DEBUG: ❌ Using fallback raw references response")
+                # Fallback for legacy responses
+                raw_references = {
+                    "text": raw_references_response.get("text", "No raw response available") if isinstance(raw_references_response, dict) else str(raw_references_response),
+                    "model": result.get("model", "gemini-pro"),
+                    "processing_time_ms": int((time.time() - start_time) * 1000),
+                    "timestamp": datetime.now().isoformat(),
+                    "request_type": "references_extraction",
+                    "processing_service": "enhanced_processing_service",
+                    "extraction_options": {
+                        "complete_references": options.get("complete_references", False)
+                    }
                 }
-            }
+            
+            print(f"🐛 DEBUG: Final raw_references text length: {len(raw_references.get('text', ''))}")
             
             references_result = AIProcessingResult(
                 processing_request_id=processing_request.id,
@@ -140,10 +210,12 @@ async def process_document(
                 processed_result=result.get("references"),
                 error_message=result.get("references", {}).get("error") if isinstance(result.get("references"), dict) and "error" in result.get("references", {}) else None,
                 error_type="ai_error" if isinstance(result.get("references"), dict) and "error" in result.get("references", {}) else None,
-                ai_model_used=result.get("model", "gemini-pro")
+                ai_model_used=raw_references.get("model", result.get("model", "gemini-pro")),
+                ai_tokens_used=raw_references.get("usage_metadata", {}).get("total_token_count", 0) if isinstance(raw_references.get("usage_metadata"), dict) else 0
             )
             db.add(references_result)
             ai_results.append(references_result)
+            print(f"🐛 DEBUG: ✅ Added references_result to database")
             
         # Update processing request status
         processing_request.status = "completed"

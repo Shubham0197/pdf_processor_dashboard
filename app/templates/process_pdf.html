@@ -77,6 +77,111 @@
         button:hover {
             background-color: #3a5ce5;
         }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        
+        /* Processing Progress Styles */
+        .processing-container {
+            display: none;
+            margin-top: 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+        }
+        .processing-container.visible {
+            display: block;
+        }
+        .processing-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+        .progress-steps {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 120px;
+            padding: 15px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+        .step.active {
+            background: rgba(255, 255, 255, 0.2);
+            transform: scale(1.05);
+        }
+        .step.completed {
+            background: rgba(46, 204, 113, 0.3);
+        }
+        .step.failed {
+            background: rgba(231, 76, 60, 0.3);
+        }
+        .step-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 10px;
+            font-size: 18px;
+            background: rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+        }
+        .step.active .step-icon {
+            background: rgba(255, 255, 255, 0.4);
+            animation: pulse 2s infinite;
+        }
+        .step.completed .step-icon {
+            background: #2ecc71;
+        }
+        .step.failed .step-icon {
+            background: #e74c3c;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .step-label {
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .overall-progress {
+            margin-top: 20px;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #2ecc71;
+            border-radius: 4px;
+            transition: width 0.5s ease;
+            width: 0%;
+        }
+        .progress-text {
+            font-size: 16px;
+            font-weight: 500;
+        }
+        
+        /* Results Container Styles */
         .results-container {
             display: none;
             margin-top: 30px;
@@ -88,16 +193,18 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 15px;
         }
         .results-title {
-            font-size: 20px;
+            font-size: 24px;
             font-weight: 600;
             color: #333;
         }
         .status {
-            padding: 5px 10px;
-            border-radius: 4px;
+            padding: 8px 16px;
+            border-radius: 20px;
             font-size: 14px;
             font-weight: 500;
         }
@@ -117,71 +224,187 @@
             background-color: #e74c3c;
             color: white;
         }
-        .json-viewer {
-            background-color: #f8f9fa;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            padding: 15px;
-            overflow: auto;
-            max-height: 500px;
-            font-family: 'Courier New', Courier, monospace;
-            white-space: pre-wrap;
+        
+        /* Tab Navigation */
+        .tab-navigation {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #eee;
+            flex-wrap: wrap;
         }
-        .loading {
+        .tab-button {
+            padding: 12px 20px;
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            color: #666;
+            transition: all 0.3s ease;
+        }
+        .tab-button.active {
+            color: #4a6cf7;
+            border-bottom-color: #4a6cf7;
+        }
+        .tab-button:hover {
+            color: #4a6cf7;
+            background: rgba(74, 108, 247, 0.05);
+        }
+        
+        /* Tab Content */
+        .tab-content {
             display: none;
-            text-align: center;
-            margin: 20px 0;
         }
-        .loading.visible {
+        .tab-content.active {
             display: block;
         }
-        .spinner {
-            border: 4px solid rgba(0, 0, 0, 0.1);
+        
+        /* Action Buttons */
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .action-btn {
+            background-color: #27ae60;
+            font-size: 14px;
+            padding: 10px 20px;
+            border-radius: 6px;
+        }
+        .action-btn:hover {
+            background-color: #219653;
+        }
+        .dashboard-btn {
+            background-color: #3498db;
+        }
+        .dashboard-btn:hover {
+            background-color: #2980b9;
+        }
+        .retry-btn {
+            background-color: #f39c12;
+        }
+        .retry-btn:hover {
+            background-color: #e67e22;
+        }
+        
+        /* Content Viewers */
+        .content-viewer {
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 20px;
+            max-height: 600px;
+            overflow: auto;
+            font-family: 'Courier New', Courier, monospace;
+            white-space: pre-wrap;
+            line-height: 1.5;
+        }
+        .content-viewer.json {
+            font-size: 14px;
+        }
+        .content-viewer.metadata {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            white-space: normal;
+        }
+        
+        /* Metadata Display */
+        .metadata-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .metadata-section {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 15px;
+        }
+        .metadata-section h4 {
+            margin: 0 0 10px 0;
+            color: #4a6cf7;
+            font-size: 16px;
+        }
+        .metadata-item {
+            margin-bottom: 8px;
+        }
+        .metadata-label {
+            font-weight: 600;
+            color: #555;
+        }
+        .metadata-value {
+            color: #333;
+            margin-left: 5px;
+        }
+        
+        /* References Display */
+        .references-list {
+            display: grid;
+            gap: 15px;
+        }
+        .reference-item {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 15px;
+            border-left: 4px solid #4a6cf7;
+        }
+        .reference-number {
+            background: #4a6cf7;
+            color: white;
+            width: 25px;
+            height: 25px;
             border-radius: 50%;
-            border-top: 4px solid #4a6cf7;
-            width: 30px;
-            height: 30px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            margin-right: 10px;
         }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .reference-text {
+            display: inline;
+            line-height: 1.6;
         }
+        
+        /* Error Styles */
         .error-message {
             color: #e74c3c;
             margin-top: 10px;
-            padding: 10px;
+            padding: 15px;
             background-color: #fadbd8;
-            border-radius: 4px;
+            border-radius: 6px;
+            border-left: 4px solid #e74c3c;
             display: none;
         }
         .error-message.visible {
             display: block;
         }
         
-        .json-actions {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 15px;
-        }
-        
-        .action-btn {
-            background-color: #27ae60;
-            font-size: 14px;
-            padding: 8px 15px;
-        }
-        
-        .action-btn:hover {
-            background-color: #219653;
-        }
-        
-        #view-batch-btn {
-            background-color: #3498db;
-        }
-        
-        #view-batch-btn:hover {
-            background-color: #2980b9;
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            .progress-steps {
+                flex-direction: column;
+                align-items: center;
+            }
+            .results-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .tab-navigation {
+                flex-direction: column;
+            }
+            .action-buttons {
+                flex-direction: column;
+            }
+            .metadata-grid {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -215,175 +438,146 @@
             <div class="error-message" id="error-message"></div>
         </div>
         
-        <div class="loading" id="loading">
-            <div class="spinner"></div>
-            <p>Processing your PDF. This may take a few moments...</p>
+        <!-- Processing Progress Container -->
+        <div class="processing-container" id="processing-container">
+            <div class="processing-title">Processing Your PDF</div>
+            <div class="progress-steps" id="progress-steps">
+                <div class="step" id="step-submit">
+                    <div class="step-icon">📝</div>
+                    <div class="step-label">Submitting Job</div>
+                </div>
+                <div class="step" id="step-download">
+                    <div class="step-icon">⬇️</div>
+                    <div class="step-label">Downloading PDF</div>
+                </div>
+                <div class="step" id="step-metadata">
+                    <div class="step-icon">🔍</div>
+                    <div class="step-label">Extracting Metadata</div>
+                </div>
+                <div class="step" id="step-references">
+                    <div class="step-icon">📚</div>
+                    <div class="step-label">Extracting References</div>
+                </div>
+                <div class="step" id="step-complete">
+                    <div class="step-icon">✅</div>
+                    <div class="step-label">Complete</div>
+                </div>
+            </div>
+            <div class="overall-progress">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+                <div class="progress-text" id="progress-text">Initializing...</div>
+            </div>
         </div>
         
+        <!-- Results Container -->
         <div class="results-container" id="results-container">
             <div class="results-header">
                 <div class="results-title">Processing Results</div>
-                <div class="status" id="status">pending</div>
-            </div>
-            <div class="json-actions">
-                <button id="copy-json-btn" class="action-btn">Copy JSON</button>
-                <button id="save-json-btn" class="action-btn">Save as JSON</button>
-                <button id="view-batch-btn" class="action-btn" style="display: none;">View in Dashboard</button>
+                <div class="status" id="status">completed</div>
             </div>
             
-            <div class="json-viewer" id="json-results"></div>
+            <div class="action-buttons">
+                <button id="copy-json-btn" class="action-btn">Copy JSON</button>
+                <button id="save-json-btn" class="action-btn">Save as JSON</button>
+                <button id="view-dashboard-btn" class="action-btn dashboard-btn" style="display: none;">View in Dashboard</button>
+                <button id="retry-btn" class="action-btn retry-btn" style="display: none;">Process Another PDF</button>
+            </div>
+            
+            <div class="tab-navigation">
+                <button class="tab-button active" data-tab="processed">Processed Results</button>
+                <button class="tab-button" data-tab="metadata">Metadata Details</button>
+                <button class="tab-button" data-tab="references">References</button>
+                <button class="tab-button" data-tab="raw">Raw AI Response</button>
+                <button class="tab-button" data-tab="json">Complete JSON</button>
+            </div>
+            
+            <div class="tab-content active" id="tab-processed">
+                <div class="content-viewer" id="processed-results">Processing results will appear here...</div>
+            </div>
+            
+            <div class="tab-content" id="tab-metadata">
+                <div class="metadata-grid" id="metadata-display">
+                    <!-- Metadata will be populated here -->
+                </div>
+            </div>
+            
+            <div class="tab-content" id="tab-references">
+                <div class="references-list" id="references-display">
+                    <!-- References will be populated here -->
+                </div>
+            </div>
+            
+            <div class="tab-content" id="tab-raw">
+                <div class="content-viewer json" id="raw-response-display">Raw AI response will appear here...</div>
+            </div>
+            
+            <div class="tab-content" id="tab-json">
+                <div class="content-viewer json" id="json-results">Complete JSON results will appear here...</div>
+            </div>
         </div>
     </div>
 
     <script>
-        // Function to get filename from URL
-        function getFilenameFromUrl(url) {
-            try {
-                // Find the portion after 'media' in the URL
-                const mediaIndex = url.indexOf('media');
-                let filename = 'document';
-                
-                if (mediaIndex !== -1) {
-                    // Get everything after 'media'
-                    const afterMedia = url.substring(mediaIndex + 5); // +5 to skip 'media'
-                    
-                    // Clean up the filename - remove query parameters, replace slashes
-                    filename = afterMedia.split('?')[0].trim();
-                    
-                    // Replace forward slashes with plus signs
-                    filename = filename.replace(/\//g, '+');
-                    
-                    // Remove any leading or trailing special characters
-                    filename = filename.replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, '');
-                    
-                    // Remove file extension if present
-                    filename = filename.split('.')[0];
-                }
-                
-                return filename || 'document';
-            } catch (e) {
-                console.error('Error extracting filename:', e);
-                return 'document';
-            }
-        }
-        
-        // Function to copy text to clipboard (fallback method if clipboard API fails)
-        function fallbackCopyTextToClipboard(text) {
-            const textArea = document.createElement('textarea');
-            textArea.value = text;
-            
-            // Make the textarea out of viewport
-            textArea.style.position = 'fixed';
-            textArea.style.left = '-999999px';
-            textArea.style.top = '-999999px';
-            document.body.appendChild(textArea);
-            textArea.focus();
-            textArea.select();
-            
-            let successful = false;
-            try {
-                successful = document.execCommand('copy');
-            } catch (err) {
-                console.error('Fallback: Oops, unable to copy', err);
-            }
-            
-            document.body.removeChild(textArea);
-            return successful;
-        }
-        
-        // Function to copy text to clipboard (using modern API with fallback)
-        function copyTextToClipboard(text) {
-            if (!navigator.clipboard) {
-                // Clipboard API not available, use fallback
-                const success = fallbackCopyTextToClipboard(text);
-                if (success) {
-                    alert('JSON copied to clipboard!');
-                } else {
-                    alert('Failed to copy JSON to clipboard');
-                }
-                return;
-            }
-            
-            // Use Clipboard API
-            navigator.clipboard.writeText(text)
-                .then(() => {
-                    alert('JSON copied to clipboard!');
-                })
-                .catch(err => {
-                    console.error('Clipboard API error:', err);
-                    // Try fallback method
-                    const success = fallbackCopyTextToClipboard(text);
-                    if (success) {
-                        alert('JSON copied to clipboard!');
-                    } else {
-                        alert('Failed to copy JSON to clipboard');
-                    }
-                });
-        }
-        
-        // Setup event listeners when DOM is fully loaded
+        // Global variables
+        let currentJobId = null;
+        let currentBatchId = null;
+        let processingInterval = null;
+        let progressSteps = ['submit', 'download', 'metadata', 'references', 'complete'];
+        let currentStep = 0;
+
+        // Initialize the page
         document.addEventListener('DOMContentLoaded', function() {
-            // Copy JSON to clipboard
-            document.getElementById('copy-json-btn').addEventListener('click', function() {
-                const jsonContent = document.getElementById('json-results').textContent;
-                if (jsonContent) {
-                    copyTextToClipboard(jsonContent);
-                } else {
-                    alert('No JSON content to copy');
-                }
-            });
-            
-            // Save JSON to file
-            document.getElementById('save-json-btn').addEventListener('click', function() {
-                const jsonContent = document.getElementById('json-results').textContent;
-                const pdfUrl = document.getElementById('pdf-url').value.trim();
-                
-                if (jsonContent) {
-                    const filename = getFilenameFromUrl(pdfUrl) + '.json';
-                    const blob = new Blob([jsonContent], {type: 'application/json'});
-                    const url = URL.createObjectURL(blob);
-                    
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = filename;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                } else {
-                    alert('No JSON content to copy');
-                }
-            });
+            setupEventListeners();
         });
-        
-        document.getElementById('process-btn').addEventListener('click', async function() {
+
+        function setupEventListeners() {
+            // Process button
+            document.getElementById('process-btn').addEventListener('click', startProcessing);
+            
+            // Action buttons
+            document.getElementById('copy-json-btn').addEventListener('click', copyJson);
+            document.getElementById('save-json-btn').addEventListener('click', saveJson);
+            document.getElementById('retry-btn').addEventListener('click', resetForm);
+            
+            // Tab navigation
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.addEventListener('click', function() {
+                    switchTab(this.dataset.tab);
+                });
+            });
+        }
+
+        async function startProcessing() {
             const pdfUrl = document.getElementById('pdf-url').value.trim();
             const errorMessage = document.getElementById('error-message');
-            const loading = document.getElementById('loading');
-            const resultsContainer = document.getElementById('results-container');
-            const jsonResults = document.getElementById('json-results');
-            const statusEl = document.getElementById('status');
             
             // Reset UI
             errorMessage.textContent = '';
             errorMessage.classList.remove('visible');
-            resultsContainer.classList.remove('visible');
+            document.getElementById('results-container').classList.remove('visible');
             
             // Validate URL
             if (!pdfUrl) {
-                errorMessage.textContent = 'Please enter a PDF URL';
-                errorMessage.classList.add('visible');
+                showError('Please enter a PDF URL');
                 return;
             }
             
+            // Disable process button
+            const processBtn = document.getElementById('process-btn');
+            processBtn.disabled = true;
+            processBtn.textContent = 'Processing...';
+            
             try {
-                // Reset the view batch button
-                document.getElementById('view-batch-btn').style.display = 'none';
+                // Show processing container
+                document.getElementById('processing-container').classList.add('visible');
                 
-                // Show loading
-                loading.classList.add('visible');
+                // Start processing animation
+                startProgressAnimation();
                 
-                // Create a new processing job
+                // Submit job
+                updateProgress(0, 'Submitting processing job...');
                 const response = await fetch('/api/v1/jobs', {
                     method: 'POST',
                     headers: {
@@ -402,109 +596,434 @@
                 }
                 
                 const jobData = await response.json();
-                const jobId = jobData.job_id;
-                const batchId = jobData.batch_id;
+                currentJobId = jobData.job_id;
+                currentBatchId = jobData.batch_id;
                 
-                // Store batch ID for reference
-                let batchTrackingId = '';
+                // Start polling for progress
+                pollJobStatus();
                 
-                // Poll for job status
-                let completed = false;
-                let attempts = 0;
-                const maxAttempts = 30; // 30 * 2 seconds = 60 seconds max wait time
-                
-                statusEl.textContent = jobData.status;
-                statusEl.className = 'status ' + jobData.status;
-                
-                while (!completed && attempts < maxAttempts) {
-                    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
-                    
-                    const statusResponse = await fetch(`/api/v1/jobs/${jobId}`, {
+            } catch (error) {
+                showError(error.message);
+                resetProcessingState();
+            }
+        }
+
+        function startProgressAnimation() {
+            currentStep = 0;
+            updateStepUI(0, 'active');
+        }
+
+        function updateProgress(percentage, message) {
+            document.getElementById('progress-fill').style.width = percentage + '%';
+            document.getElementById('progress-text').textContent = message;
+        }
+
+        function updateStepUI(stepIndex, status) {
+            if (stepIndex >= 0 && stepIndex < progressSteps.length) {
+                const step = document.getElementById(`step-${progressSteps[stepIndex]}`);
+                if (step) {
+                    step.className = `step ${status}`;
+                }
+            }
+        }
+
+        async function pollJobStatus() {
+            let attempts = 0;
+            const maxAttempts = 60; // 60 * 2 seconds = 2 minutes max wait time
+            
+            processingInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/api/v1/jobs/${currentJobId}`, {
                         method: 'GET',
-                        headers: {
-                            'Accept': 'application/json'
-                        }
+                        headers: { 'Accept': 'application/json' }
                     });
                     
-                    if (!statusResponse.ok) {
+                    if (!response.ok) {
                         throw new Error('Failed to check job status');
                     }
                     
-                    const statusData = await statusResponse.json();
+                    const statusData = await response.json();
                     
-                    // Update status display
-                    statusEl.textContent = statusData.status;
-                    statusEl.className = 'status ' + statusData.status;
-                    
-                    if (statusData.status === 'completed' || statusData.status === 'failed') {
-                        completed = true;
-                        
-                        // Show results
-                        if (statusData.status === 'completed') {
-                            // Get batch information if available
-                            let batchInfo = '';
-                            if (batchId) {
-                                try {
-                                    const batchResponse = await fetch(`/api/v1/batch/${batchId}/status`, {
-                                        method: 'GET',
-                                        headers: {
-                                            'Accept': 'application/json'
-                                        }
-                                    });
-                                    
-                                    if (batchResponse.ok) {
-                                        const batchData = await batchResponse.json();
-                                        batchTrackingId = batchData.batch_id;
-                                        batchInfo = `\n\n// Batch Information\n{
-  "batch_id": "${batchData.batch_id}",
-  "status": "${batchData.status}",
-  "processed_files": ${batchData.processed_files},
-  "total_files": ${batchData.total_files},
-  "view_batch_url": "/dashboard/batch/${batchData.batch_id}"
-}`;
-                                    }
-                                } catch (batchError) {
-                                    console.error('Failed to fetch batch data:', batchError);
-                                }
+                    // Update progress based on status
+                    switch (statusData.status) {
+                        case 'pending':
+                            updateProgress(10, 'Job queued, waiting to start...');
+                            updateStepUI(0, 'active');
+                            break;
+                        case 'processing':
+                            // Progress through steps based on time or other indicators
+                            if (currentStep < 3) {
+                                currentStep++;
+                                updateStepUI(currentStep - 1, 'completed');
+                                updateStepUI(currentStep, 'active');
+                                
+                                const messages = [
+                                    'Downloading PDF file...',
+                                    'Extracting metadata with AI...',
+                                    'Extracting references with AI...'
+                                ];
+                                updateProgress(20 + (currentStep * 25), messages[currentStep - 1] || 'Processing...');
                             }
+                            break;
+                        case 'completed':
+                            clearInterval(processingInterval);
+                            // Complete all steps
+                            for (let i = 0; i < progressSteps.length - 1; i++) {
+                                updateStepUI(i, 'completed');
+                            }
+                            updateStepUI(progressSteps.length - 1, 'completed');
+                            updateProgress(100, 'Processing completed successfully!');
                             
-                            // Format and display the JSON results along with batch info
-                            const formattedJson = JSON.stringify({
-                                extracted_text: statusData.extracted_text,
-                                metadata: statusData.doc_metadata,
-                                references: statusData.references
-                            }, null, 2) + batchInfo;
-                            
-                            jsonResults.textContent = formattedJson;
-                        } else {
-                            jsonResults.textContent = `Error: ${statusData.error_message || 'Unknown error occurred'}`;
-                        }
-                        
-                        resultsContainer.classList.add('visible');
-                        
-                        // Show batch view button if we have a batch ID
-                        if (batchTrackingId) {
-                            const viewBatchBtn = document.getElementById('view-batch-btn');
-                            viewBatchBtn.style.display = 'inline-block';
-                            viewBatchBtn.onclick = function() {
-                                window.location.href = `/dashboard/batch/${batchTrackingId}`;
-                            };
-                        }
+                            // Show results after a brief delay
+                            setTimeout(() => {
+                                showResults(statusData);
+                            }, 1000);
+                            break;
+                        case 'failed':
+                            clearInterval(processingInterval);
+                            updateStepUI(currentStep, 'failed');
+                            updateProgress(0, 'Processing failed');
+                            showError(statusData.error_message || 'Unknown error occurred');
+                            resetProcessingState();
+                            break;
                     }
                     
                     attempts++;
+                    if (attempts >= maxAttempts) {
+                        clearInterval(processingInterval);
+                        showError('Processing is taking longer than expected. Please check the dashboard for results.');
+                        resetProcessingState();
+                    }
+                    
+                } catch (error) {
+                    clearInterval(processingInterval);
+                    showError(error.message);
+                    resetProcessingState();
                 }
+            }, 2000);
+        }
+
+        async function showResults(statusData) {
+            // Hide processing container
+            document.getElementById('processing-container').classList.remove('visible');
+            
+            // Show results container
+            document.getElementById('results-container').classList.add('visible');
+            
+            // Update status
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = statusData.status;
+            statusEl.className = 'status ' + statusData.status;
+            
+            // Prepare complete results object
+            const completeResults = {
+                job_id: currentJobId,
+                batch_id: currentBatchId,
+                status: statusData.status,
+                extracted_text: statusData.extracted_text,
+                metadata: statusData.doc_metadata,
+                references: statusData.references,
+                processing_time: statusData.processing_time,
+                completed_at: new Date().toISOString()
+            };
+            
+            // Display processed results
+            displayProcessedResults(completeResults);
+            
+            // Display metadata details
+            displayMetadataDetails(statusData.doc_metadata);
+            
+            // Display references
+            displayReferences(statusData.references);
+            
+            // Display raw AI response (fetch from API if available)
+            await displayRawResponse(currentJobId);
+            
+            // Display complete JSON
+            document.getElementById('json-results').textContent = JSON.stringify(completeResults, null, 2);
+            
+            // Show dashboard button if we have batch ID
+            if (currentBatchId) {
+                const dashboardBtn = document.getElementById('view-dashboard-btn');
+                dashboardBtn.style.display = 'inline-block';
+                dashboardBtn.onclick = function() {
+                    window.location.href = `/dashboard/batch/${currentBatchId}`;
+                };
+            }
+            
+            // Show retry button
+            document.getElementById('retry-btn').style.display = 'inline-block';
+            
+            // Reset process button
+            resetProcessingState();
+        }
+
+        function displayProcessedResults(results) {
+            const container = document.getElementById('processed-results');
+            let html = '<div class="metadata-grid">';
+            
+            // Basic info
+            html += '<div class="metadata-section">';
+            html += '<h4>Processing Summary</h4>';
+            html += `<div class="metadata-item"><span class="metadata-label">Status:</span><span class="metadata-value">${results.status}</span></div>`;
+            html += `<div class="metadata-item"><span class="metadata-label">Job ID:</span><span class="metadata-value">${results.job_id}</span></div>`;
+            if (results.processing_time) {
+                html += `<div class="metadata-item"><span class="metadata-label">Processing Time:</span><span class="metadata-value">${results.processing_time}</span></div>`;
+            }
+            html += '</div>';
+            
+            // Document info
+            if (results.metadata) {
+                html += '<div class="metadata-section">';
+                html += '<h4>Document Information</h4>';
+                if (results.metadata.title) {
+                    html += `<div class="metadata-item"><span class="metadata-label">Title:</span><span class="metadata-value">${results.metadata.title}</span></div>`;
+                }
+                if (results.metadata.authors && Array.isArray(results.metadata.authors)) {
+                    html += `<div class="metadata-item"><span class="metadata-label">Authors:</span><span class="metadata-value">${results.metadata.authors.length} author(s)</span></div>`;
+                }
+                if (results.metadata.year) {
+                    html += `<div class="metadata-item"><span class="metadata-label">Year:</span><span class="metadata-value">${results.metadata.year}</span></div>`;
+                }
+                html += '</div>';
+            }
+            
+            // References info
+            if (results.references && Array.isArray(results.references)) {
+                html += '<div class="metadata-section">';
+                html += '<h4>References Summary</h4>';
+                html += `<div class="metadata-item"><span class="metadata-label">Total References:</span><span class="metadata-value">${results.references.length}</span></div>`;
+                html += '</div>';
+            }
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        function displayMetadataDetails(metadata) {
+            const container = document.getElementById('metadata-display');
+            if (!metadata) {
+                container.innerHTML = '<div class="metadata-section"><h4>No metadata available</h4></div>';
+                return;
+            }
+            
+            let html = '';
+            
+            // Basic metadata
+            html += '<div class="metadata-section">';
+            html += '<h4>Basic Information</h4>';
+            
+            const basicFields = ['title', 'abstract', 'journal', 'volume', 'issue', 'year', 'doi', 'pages'];
+            basicFields.forEach(field => {
+                if (metadata[field]) {
+                    const label = field.charAt(0).toUpperCase() + field.slice(1);
+                    html += `<div class="metadata-item"><span class="metadata-label">${label}:</span><span class="metadata-value">${metadata[field]}</span></div>`;
+                }
+            });
+            html += '</div>';
+            
+            // Authors
+            if (metadata.authors && Array.isArray(metadata.authors)) {
+                html += '<div class="metadata-section">';
+                html += '<h4>Authors</h4>';
+                metadata.authors.forEach((author, index) => {
+                    html += `<div class="metadata-item" style="margin-bottom: 15px; padding: 10px; border: 1px solid #eee; border-radius: 4px;">`;
+                    html += `<strong>Author ${index + 1}</strong><br>`;
+                    if (author.name) html += `<span class="metadata-label">Name:</span> ${author.name}<br>`;
+                    if (author.institution) html += `<span class="metadata-label">Institution:</span> ${author.institution}<br>`;
+                    if (author.email) html += `<span class="metadata-label">Email:</span> ${author.email}<br>`;
+                    if (author.department) html += `<span class="metadata-label">Department:</span> ${author.department}<br>`;
+                    html += `</div>`;
+                });
+                html += '</div>';
+            }
+            
+            // Keywords
+            if (metadata.keywords && Array.isArray(metadata.keywords)) {
+                html += '<div class="metadata-section">';
+                html += '<h4>Keywords</h4>';
+                html += `<div class="metadata-item">${metadata.keywords.join(', ')}</div>`;
+                html += '</div>';
+            }
+            
+            container.innerHTML = html;
+        }
+
+        function displayReferences(references) {
+            const container = document.getElementById('references-display');
+            if (!references || !Array.isArray(references) || references.length === 0) {
+                container.innerHTML = '<div class="reference-item">No references found or available</div>';
+                return;
+            }
+            
+            let html = '';
+            references.forEach((ref, index) => {
+                html += '<div class="reference-item">';
+                html += `<span class="reference-number">${index + 1}</span>`;
+                html += `<span class="reference-text">${ref.text || ref.title || 'Reference text not available'}</span>`;
+                html += '</div>';
+            });
+            
+            container.innerHTML = html;
+        }
+
+        async function displayRawResponse(jobId) {
+            try {
+                // Try to fetch raw AI response from processing results
+                const response = await fetch(`/api/v1/jobs/${jobId}/raw-response`, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' }
+                });
                 
-                if (!completed) {
-                    throw new Error('Processing is taking longer than expected. Please check the dashboard for results.');
+                if (response.ok) {
+                    const rawData = await response.json();
+                    document.getElementById('raw-response-display').textContent = JSON.stringify(rawData, null, 2);
+                } else {
+                    document.getElementById('raw-response-display').textContent = 'Raw AI response not available for this job';
                 }
             } catch (error) {
-                errorMessage.textContent = error.message;
-                errorMessage.classList.add('visible');
-            } finally {
-                loading.classList.remove('visible');
+                document.getElementById('raw-response-display').textContent = 'Unable to fetch raw AI response';
             }
-        });
+        }
+
+        function switchTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+            
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+        }
+
+        function copyJson() {
+            const jsonContent = document.getElementById('json-results').textContent;
+            if (jsonContent) {
+                copyToClipboard(jsonContent);
+            } else {
+                alert('No JSON content to copy');
+            }
+        }
+
+        function saveJson() {
+            const jsonContent = document.getElementById('json-results').textContent;
+            const pdfUrl = document.getElementById('pdf-url').value.trim();
+            
+            if (jsonContent) {
+                const filename = getFilenameFromUrl(pdfUrl) + '.json';
+                downloadFile(jsonContent, filename, 'application/json');
+            } else {
+                alert('No JSON content to save');
+            }
+        }
+
+        function resetForm() {
+            // Reset all UI elements
+            document.getElementById('pdf-url').value = '';
+            document.getElementById('complete-references').checked = false;
+            document.getElementById('processing-container').classList.remove('visible');
+            document.getElementById('results-container').classList.remove('visible');
+            document.getElementById('error-message').classList.remove('visible');
+            
+            // Reset progress
+            currentStep = 0;
+            document.querySelectorAll('.step').forEach(step => step.className = 'step');
+            document.getElementById('progress-fill').style.width = '0%';
+            
+            // Reset variables
+            currentJobId = null;
+            currentBatchId = null;
+            
+            // Clear any intervals
+            if (processingInterval) {
+                clearInterval(processingInterval);
+                processingInterval = null;
+            }
+            
+            // Reset process button
+            resetProcessingState();
+            
+            // Switch back to first tab
+            switchTab('processed');
+        }
+
+        function resetProcessingState() {
+            const processBtn = document.getElementById('process-btn');
+            processBtn.disabled = false;
+            processBtn.textContent = 'Process PDF';
+        }
+
+        function showError(message) {
+            const errorEl = document.getElementById('error-message');
+            errorEl.textContent = message;
+            errorEl.classList.add('visible');
+        }
+
+        // Utility functions
+        function getFilenameFromUrl(url) {
+            try {
+                const mediaIndex = url.indexOf('media');
+                let filename = 'document';
+                
+                if (mediaIndex !== -1) {
+                    const afterMedia = url.substring(mediaIndex + 5);
+                    filename = afterMedia.split('?')[0].trim();
+                    filename = filename.replace(/\//g, '+');
+                    filename = filename.replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, '');
+                    filename = filename.split('.')[0];
+                }
+                
+                return filename || 'document';
+            } catch (e) {
+                return 'document';
+            }
+        }
+
+        function copyToClipboard(text) {
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(text)
+                    .then(() => alert('Content copied to clipboard!'))
+                    .catch(() => fallbackCopy(text));
+            } else {
+                fallbackCopy(text);
+            }
+        }
+
+        function fallbackCopy(text) {
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-999999px';
+            textArea.style.top = '-999999px';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    alert('Content copied to clipboard!');
+                } else {
+                    alert('Failed to copy content');
+                }
+            } catch (err) {
+                alert('Failed to copy content');
+            }
+            
+            document.body.removeChild(textArea);
+        }
+
+        function downloadFile(content, filename, mimeType) {
+            const blob = new Blob([content], {type: mimeType});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
     </script>
 </body>
 </html>

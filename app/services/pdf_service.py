@@ -6,7 +6,7 @@ import httpx
 import fitz  # PyMuPDF
 from sqlalchemy.ext.asyncio import AsyncSession
 # from app.services.gemini_service import extract_metadata_with_gemini, extract_references_with_gemini
-from app.schemas.gemini_schemas import PDFProcessingResult, MetadataResponse, Reference
+from app.schemas.gemini_schemas import PDFProcessingResult, MetadataResponse, Reference, CompletePDFProcessingResult
 
 async def download_pdf(url: str, timeout: int = 30):
     """Download PDF from URL to a temporary file"""
@@ -82,6 +82,9 @@ async def process_pdf(file_url: str, db: AsyncSession, options=None):
                 # Process the PDF directly with Gemini
                 from app.services.gemini_service import process_pdf_directly
                 
+                print(f"🐛 DEBUG: Starting process_pdf with pdf_path={pdf_path}")
+                print(f"🐛 DEBUG: extract_metadata={options.get('extract_metadata', True)}, extract_references={options.get('extract_references', True)}")
+                
                 print(f"Processing PDF directly with Gemini API: {pdf_path}")
                 gemini_result = await process_pdf_directly(
                     pdf_path=pdf_path,
@@ -90,28 +93,40 @@ async def process_pdf(file_url: str, db: AsyncSession, options=None):
                     extract_references=options.get("extract_references", True),
                     complete_references=options.get("complete_references", False)
                 )
+                print(f"🐛 DEBUG: gemini_result keys: {list(gemini_result.keys()) if isinstance(gemini_result, dict) else 'Not a dict'}")
                 
-                # Add the results to our response
-                if "metadata" in gemini_result:
-                    result["metadata"] = gemini_result["metadata"]
-                
-                if "references" in gemini_result:
-                    result["references"] = gemini_result["references"]
-                    
-                if "error" in gemini_result:
-                    print(f"Error in direct PDF processing: {gemini_result['error']}")
-                    # If there was an error, fall back to text extraction
-                    if "metadata" not in result and options.get("extract_metadata", True):
-                        print("Falling back to text extraction for metadata")
-                        # pdf_text = await extract_text_from_pdf(pdf_path)
-                        # metadata = await extract_metadata_with_gemini(pdf_text, db)
-                        # result["metadata"] = metadata
+                if isinstance(gemini_result, dict):
+                    if "error" in gemini_result:
+                        print(f"🐛 DEBUG: Error in gemini_result: {gemini_result['error']}")
+                        result["error"] = gemini_result["error"]
+                    else:
+                        print("🐛 DEBUG: Processing successful gemini results")
                         
-                    if "references" not in result and options.get("extract_references", True):
-                        print("Falling back to text extraction for references")
-                        # pdf_text = await extract_text_from_pdf(pdf_path)
-                        # references = await extract_references_with_gemini(pdf_text, db)
-                        # result["references"] = references
+                        # Add the results to our response
+                        if "metadata" in gemini_result:
+                            print(f"🐛 DEBUG: Adding metadata to result")
+                            result["metadata"] = gemini_result["metadata"]
+                        
+                        if "references" in gemini_result:
+                            print(f"🐛 DEBUG: Adding {len(gemini_result['references'])} references to result")
+                            result["references"] = gemini_result["references"]
+                        
+                        # Pass through raw AI responses for storage in database
+                        if "raw_metadata_response" in gemini_result:
+                            print(f"🐛 DEBUG: Found raw_metadata_response in gemini_result")
+                            print(f"🐛 DEBUG: raw_metadata_response keys: {list(gemini_result['raw_metadata_response'].keys()) if isinstance(gemini_result['raw_metadata_response'], dict) else 'Not a dict'}")
+                            print(f"🐛 DEBUG: raw_metadata_response text length: {len(gemini_result['raw_metadata_response'].get('text', '')) if isinstance(gemini_result['raw_metadata_response'], dict) else 'No text'}")
+                            result["raw_metadata_response"] = gemini_result["raw_metadata_response"]
+                        else:
+                            print("🐛 DEBUG: ❌ NO raw_metadata_response found in gemini_result")
+                        
+                        if "raw_references_response" in gemini_result:
+                            print(f"🐛 DEBUG: Found raw_references_response in gemini_result")
+                            print(f"🐛 DEBUG: raw_references_response keys: {list(gemini_result['raw_references_response'].keys()) if isinstance(gemini_result['raw_references_response'], dict) else 'Not a dict'}")
+                            print(f"🐛 DEBUG: raw_references_response text length: {len(gemini_result['raw_references_response'].get('text', '')) if isinstance(gemini_result['raw_references_response'], dict) else 'No text'}")
+                            result["raw_references_response"] = gemini_result["raw_references_response"]
+                        else:
+                            print("🐛 DEBUG: ❌ NO raw_references_response found in gemini_result")
             except Exception as e:
                 print(f"Error in direct PDF processing, falling back to text extraction: {e}")
                 # Fall back to text extraction method
@@ -160,7 +175,11 @@ async def process_pdf(file_url: str, db: AsyncSession, options=None):
         
         # Validate the result with Pydantic model
         try:
-            validated_result = PDFProcessingResult(**result)
+            validated_result = CompletePDFProcessingResult(**result)
+            print(f"🐛 DEBUG: Final result keys: {list(result.keys())}")
+            print(f"🐛 DEBUG: Final result has raw_metadata_response: {'raw_metadata_response' in result}")
+            print(f"🐛 DEBUG: Final result has raw_references_response: {'raw_references_response' in result}")
+            
             return validated_result.dict(exclude_none=True)
         except Exception as e:
             print(f"Error validating result: {e}")
