@@ -36,11 +36,29 @@ class JobInDB(JobBase):
         from_attributes = True
 
 class JobResponse(BaseModel):
+    id: int
     job_id: str
     file_url: str
     file_name: Optional[str] = None
     status: str
     batch_id: Optional[int] = None
+    created_at: datetime
+    progress_percentage: int = Field(default=0, description="Progress percentage (0-100)")
+
+class JobProgress(BaseModel):
+    job_id: str
+    status: str
+    progress_percentage: int = Field(description="Progress percentage (0-100)")
+    started_at: Optional[datetime] = Field(None, description="When the job started processing")
+    estimated_completion: Optional[datetime] = Field(None, description="Estimated completion time")
+    completed_at: Optional[datetime] = Field(None, description="When the job was completed")
+    worker_id: Optional[str] = Field(None, description="ID of the worker processing the job")
+    last_heartbeat: Optional[datetime] = Field(None, description="Last heartbeat from the worker")
+    error_message: Optional[str] = Field(None, description="Error message if job failed")
+    processing_time: Optional[int] = Field(None, description="Processing time in milliseconds")
+    created_at: Optional[datetime] = Field(None, description="When the job was created")
+    file_url: str = Field(description="URL of the PDF being processed")
+    file_name: Optional[str] = Field(None, description="Name of the file")
 
 class JobResult(BaseModel):
     job_id: str
@@ -52,6 +70,12 @@ class JobResult(BaseModel):
     references: Optional[List[Dict[str, Any]]] = None
     error: Optional[str] = None
     processing_time: Optional[int] = None
+    
+    # Add progress tracking fields to job result
+    progress_percentage: Optional[int] = Field(None, description="Progress percentage (0-100)")
+    started_at: Optional[datetime] = Field(None, description="When the job started processing")
+    completed_at: Optional[datetime] = Field(None, description="When the job was completed")
+    worker_id: Optional[str] = Field(None, description="ID of the worker that processed the job")
     
     class Config:
         from_attributes = True

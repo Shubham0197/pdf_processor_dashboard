@@ -5,6 +5,8 @@ import io
 import base64
 import pathlib
 import time
+import tempfile
+import httpx
 from google import genai
 from google.genai import client, types
 from opik import track
@@ -26,12 +28,37 @@ async def configure_gemini(db: AsyncSession):
         print(f"Error configuring Gemini API: {e}")
         return False
 
+async def download_pdf_from_url(url: str) -> str:
+    """Download PDF from URL to a temporary file and return the local path"""
+    try:
+        print(f"📥 Downloading PDF from URL: {url}")
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            
+            # Create a temporary file
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+                temp_file.write(response.content)
+                temp_path = temp_file.name
+                
+            print(f"✅ PDF downloaded to temporary file: {temp_path}")
+            print(f"📊 Downloaded file size: {len(response.content) / (1024 * 1024):.2f} MB")
+            return temp_path
+            
+    except httpx.HTTPError as e:
+        print(f"❌ HTTP error downloading PDF from {url}: {e}")
+        raise Exception(f"Failed to download PDF from {url}: {e}")
+    except Exception as e:
+        print(f"❌ Error downloading PDF from {url}: {e}")
+        raise Exception(f"Failed to download PDF from {url}: {e}")
+
 async def process_pdf_directly(pdf_path: str, db: AsyncSession, extract_metadata=True, extract_references=True, complete_references=False):
     """Process a PDF file directly using Google Gemini API without text extraction"""
     # Ensure Gemini is configured
     if not await configure_gemini(db):
         return {"error": "Failed to configure Gemini API. Please check your API key."}
-        
+    
+    temp_file_path = None
     try:
         try:
             api_key = await get_active_key_by_type(db, "gemini")
@@ -55,8 +82,17 @@ async def process_pdf_directly(pdf_path: str, db: AsyncSession, extract_metadata
         print(f"Creating GenerativeModel with name: {model_name}")
         # model = client.get_model(model_name)
         
-        # Check if the file exists and get its size
-        path = pathlib.Path(pdf_path)
+        # Check if pdf_path is a URL or local file path
+        if pdf_path.startswith(('http://', 'https://')):
+            # It's a URL, download it first
+            temp_file_path = await download_pdf_from_url(pdf_path)
+            path = pathlib.Path(temp_file_path)
+            print(f"🌐 Processing PDF from URL: {pdf_path}")
+        else:
+            # It's a local file path
+            path = pathlib.Path(pdf_path)
+            print(f"📁 Processing local PDF file: {pdf_path}")
+        
         if not path.exists():
             return {
                 "error": f"PDF file not found at {pdf_path}"
@@ -193,7 +229,60 @@ IMPORTANT: If you cannot extract some information, use null or empty arrays as a
         if extract_references:
             references_prompt = """
             Extract all references/citations from this academic article.
-            For each reference, provide the following information in a structured format:
+            
+            *** CRITICAL INSTRUCTION - CITATION CONTINUITY ACROSS PAGES AND COLUMNS ***
+            BEFORE processing any citations, you MUST first scan the entire document for citations that are split across pages OR across columns on the same page. This is EXTREMELY common in academic PDFs with multi-column layouts.
+            
+            SIGNS OF A SPLIT CITATION (ACROSS PAGES OR COLUMNS):
+            1. Text that starts mid-sentence without a citation number (e.g., "application of squeeze film dampers...")
+            2. Text that starts with lowercase letters in the references section
+            3. Text that starts with conjunctions like "and", "or", "but", "in", "of", "for"
+            4. Text that contains only publication details without author names
+            5. Text that appears to be a continuation of a title or journal name
+            6. Incomplete sentences that continue elsewhere in the document
+            7. Citations that end abruptly without proper punctuation or completion
+            8. Text fragments that appear isolated but seem to belong to a larger citation
+            9. Author lists that appear incomplete (missing "and" or "&" connections)
+            10. Journal names or titles that appear cut off mid-word
+            11. Years, volumes, or page numbers that appear without context
+            
+            MANDATORY CITATION MERGING PROCESS:
+            1. First, identify ALL text segments that appear to be reference fragments
+            2. Look for patterns where one segment ends incompletely and another begins without a number
+            3. Check for fragments that appear in sequence but seem disconnected
+            4. ALWAYS combine fragments that belong to the same logical citation, regardless of whether they're on the same page or different pages
+            5. Use context clues like author names, years, publication patterns, and citation numbering to identify related fragments
+            6. Pay special attention to multi-column layouts where text may wrap from one column to another
+            
+            DETAILED EXAMPLES OF SPLIT CITATIONS TO MERGE:
+            
+            Example 1 - Title Split Across Columns:
+            Left Column: "15. Smith, J. (2020). Advanced Methods in Machine"
+            Right Column: "Learning for Data Analysis. Journal of AI Research, 45(2), 123-145."
+            → MERGE INTO: "15. Smith, J. (2020). Advanced Methods in Machine Learning for Data Analysis. Journal of AI Research, 45(2), 123-145."
+            
+            Example 2 - Author Split Across Columns:
+            Left Column: "23. Johnson, M.K.; Williams, P.R. & Brown,"
+            Right Column: "A.L. Experimental study of thermal dynamics. Proceedings of ASME, 2019."
+            → MERGE INTO: "23. Johnson, M.K.; Williams, P.R. & Brown, A.L. Experimental study of thermal dynamics. Proceedings of ASME, 2019."
+            
+            Example 3 - Journal Name Split Across Columns:
+            Left Column: "8. Davis, R. (2018). Optimization techniques. International Journal of"
+            Right Column: "Engineering and Technology Sciences, 12(3), 45-67."
+            → MERGE INTO: "8. Davis, R. (2018). Optimization techniques. International Journal of Engineering and Technology Sciences, 12(3), 45-67."
+            
+            Example 4 - Citation Split Between Pages:
+            Page N (end): "12. Anderson, K., Thompson, L., Garcia, M."
+            Page N+1 (start): "& Wilson, S. (2021). Computational fluid dynamics analysis. Nature Physics."
+            → MERGE INTO: "12. Anderson, K., Thompson, L., Garcia, M. & Wilson, S. (2021). Computational fluid dynamics analysis. Nature Physics."
+            
+            Example 5 - Multi-Column Same Page Split:
+            Text appears as: "5. Kumar, S., Lim, S.M., Ramasamy, K. et al. Synthesis," followed later by "molecular docking and biological evaluation of bis-pyrimidine Schiff base derivatives. Chemistry Central Journal 11, 89 (2017)."
+            → MERGE INTO: "5. Kumar, S., Lim, S.M., Ramasamy, K. et al. Synthesis, molecular docking and biological evaluation of bis-pyrimidine Schiff base derivatives. Chemistry Central Journal 11, 89 (2017)."
+            
+            DO NOT CREATE SEPARATE CITATIONS FOR FRAGMENTS THAT BELONG TOGETHER!
+            
+            After ensuring all split citations are properly merged, extract the following for each complete reference:
             
             1. Full reference text (exactly as it appears in the document as key "text")
             2. Citation type (journal article, book, conference paper, website/URL, etc.)
@@ -216,19 +305,6 @@ IMPORTANT: If you cannot extract some information, use null or empty arrays as a
             - If the reference is a conference proceeding, set "citation_type" to "conference proceedings" and fill the "conference" field with the conference name. Leave "journal" empty or null.
             - For other types, use the appropriate "citation_type" and fill only the relevant fields.
             
-            EXTREMELY IMPORTANT - CITATION CONTINUITY ACROSS PAGES:
-            1. You MUST carefully check for citations that span across multiple pages or columns.
-            2. A citation is likely continuing from the previous page if:
-               - It starts without a citation number but is in the references section
-               - It starts mid-sentence or with lowercase letters
-               - It starts with "and" or other conjunctions
-               - It lacks author information but contains publication details
-               - The previous page ends with an incomplete citation
-            3. NEVER create two separate citations when one citation spans across pages.
-            4. ALWAYS join text that belongs to the same citation, even if it appears on different pages.
-            5. IMPORTANT EXAMPLE: If you see "19. Zeidan, F.Y.; San Andres, L. & Vance, J.M. Design and" at the bottom of one page and "application of squeeze film dampers in rotating machinery. Proceedings of the Twenty-Fifth Turbomachinery Symposium, 1996." at the top of the next page, this is ONE citation, not two.
-            
-            
             For example, for the reference "1. Akram, f., O. Ilyas and B. A. K. Prusty (2015). International Journal of Engineering Technology Science and Research 2(10): 1-11. /n doi: 10.14429/dsj.60.57", provide:
             - text: "1. Akram, f., O. Ilyas and B. A. K. Prusty (2015). International Journal of Engineering Technology Science and Research 2(10): 1-11."
             - citation_type: "journal article"
@@ -236,6 +312,7 @@ IMPORTANT: If you cannot extract some information, use null or empty arrays as a
             - title: (extract if present)
             - year: "2015"
             - journal: "International Journal of Engineering Technology Science and Research"
+            - conference: null (extract if present, eg In Proceedings of the ICASSP the value should be "ICASSP")
             - volume: "2"
             - issue: "10"
             - pages: "1-11"
@@ -309,7 +386,60 @@ IMPORTANT: If you cannot extract some information, use null or empty arrays as a
                         # Initial request for references
                         initial_prompt = """
             Extract all references/citations from this academic article.
-            For each reference, provide the following information in a structured format:
+            
+            *** CRITICAL INSTRUCTION - CITATION CONTINUITY ACROSS PAGES AND COLUMNS ***
+            BEFORE processing any citations, you MUST first scan the entire document for citations that are split across pages OR across columns on the same page. This is EXTREMELY common in academic PDFs with multi-column layouts.
+            
+            SIGNS OF A SPLIT CITATION (ACROSS PAGES OR COLUMNS):
+            1. Text that starts mid-sentence without a citation number (e.g., "application of squeeze film dampers...")
+            2. Text that starts with lowercase letters in the references section
+            3. Text that starts with conjunctions like "and", "or", "but", "in", "of", "for"
+            4. Text that contains only publication details without author names
+            5. Text that appears to be a continuation of a title or journal name
+            6. Incomplete sentences that continue elsewhere in the document
+            7. Citations that end abruptly without proper punctuation or completion
+            8. Text fragments that appear isolated but seem to belong to a larger citation
+            9. Author lists that appear incomplete (missing "and" or "&" connections)
+            10. Journal names or titles that appear cut off mid-word
+            11. Years, volumes, or page numbers that appear without context
+            
+            MANDATORY CITATION MERGING PROCESS:
+            1. First, identify ALL text segments that appear to be reference fragments
+            2. Look for patterns where one segment ends incompletely and another begins without a number
+            3. Check for fragments that appear in sequence but seem disconnected
+            4. ALWAYS combine fragments that belong to the same logical citation, regardless of whether they're on the same page or different pages
+            5. Use context clues like author names, years, publication patterns, and citation numbering to identify related fragments
+            6. Pay special attention to multi-column layouts where text may wrap from one column to another
+            
+            DETAILED EXAMPLES OF SPLIT CITATIONS TO MERGE:
+            
+            Example 1 - Title Split Across Columns:
+            Left Column: "15. Smith, J. (2020). Advanced Methods in Machine"
+            Right Column: "Learning for Data Analysis. Journal of AI Research, 45(2), 123-145."
+            → MERGE INTO: "15. Smith, J. (2020). Advanced Methods in Machine Learning for Data Analysis. Journal of AI Research, 45(2), 123-145."
+            
+            Example 2 - Author Split Across Columns:
+            Left Column: "23. Johnson, M.K.; Williams, P.R. & Brown,"
+            Right Column: "A.L. Experimental study of thermal dynamics. Proceedings of ASME, 2019."
+            → MERGE INTO: "23. Johnson, M.K.; Williams, P.R. & Brown, A.L. Experimental study of thermal dynamics. Proceedings of ASME, 2019."
+            
+            Example 3 - Journal Name Split Across Columns:
+            Left Column: "8. Davis, R. (2018). Optimization techniques. International Journal of"
+            Right Column: "Engineering and Technology Sciences, 12(3), 45-67."
+            → MERGE INTO: "8. Davis, R. (2018). Optimization techniques. International Journal of Engineering and Technology Sciences, 12(3), 45-67."
+            
+            Example 4 - Citation Split Between Pages:
+            Page N (end): "12. Anderson, K., Thompson, L., Garcia, M."
+            Page N+1 (start): "& Wilson, S. (2021). Computational fluid dynamics analysis. Nature Physics."
+            → MERGE INTO: "12. Anderson, K., Thompson, L., Garcia, M. & Wilson, S. (2021). Computational fluid dynamics analysis. Nature Physics."
+            
+            Example 5 - Multi-Column Same Page Split:
+            Text appears as: "5. Kumar, S., Lim, S.M., Ramasamy, K. et al. Synthesis," followed later by "molecular docking and biological evaluation of bis-pyrimidine Schiff base derivatives. Chemistry Central Journal 11, 89 (2017)."
+            → MERGE INTO: "5. Kumar, S., Lim, S.M., Ramasamy, K. et al. Synthesis, molecular docking and biological evaluation of bis-pyrimidine Schiff base derivatives. Chemistry Central Journal 11, 89 (2017)."
+            
+            DO NOT CREATE SEPARATE CITATIONS FOR FRAGMENTS THAT BELONG TOGETHER!
+            
+            After ensuring all split citations are properly merged, extract the following for each complete reference:
             
             1. Full reference text (exactly as it appears in the document as key "text")
             2. Citation type (journal article, book, conference paper, website/URL, etc.)
@@ -332,19 +462,6 @@ IMPORTANT: If you cannot extract some information, use null or empty arrays as a
             - If the reference is a conference proceeding, set "citation_type" to "conference proceedings" and fill the "conference" field with the conference name. Leave "journal" empty or null.
             - For other types, use the appropriate "citation_type" and fill only the relevant fields.
             
-            EXTREMELY IMPORTANT - CITATION CONTINUITY ACROSS PAGES:
-            1. You MUST carefully check for citations that span across multiple pages or columns.
-            2. A citation is likely continuing from the previous page if:
-               - It starts without a citation number but is in the references section
-               - It starts mid-sentence or with lowercase letters
-               - It starts with "and" or other conjunctions
-               - It lacks author information but contains publication details
-               - The previous page ends with an incomplete citation
-            3. NEVER create two separate citations when one citation spans across pages.
-            4. ALWAYS join text that belongs to the same citation, even if it appears on different pages.
-            5. IMPORTANT EXAMPLE: If you see "19. Zeidan, F.Y.; San Andres, L. & Vance, J.M. Design and" at the bottom of one page and "application of squeeze film dampers in rotating machinery. Proceedings of the Twenty-Fifth Turbomachinery Symposium, 1996." at the top of the next page, this is ONE citation, not two.
-            
-            
             For example, for the reference "1. Akram, f., O. Ilyas and B. A. K. Prusty (2015). International Journal of Engineering Technology Science and Research 2(10): 1-11. /n doi: 10.14429/dsj.60.57", provide:
             - text: "1. Akram, f., O. Ilyas and B. A. K. Prusty (2015). International Journal of Engineering Technology Science and Research 2(10): 1-11."
             - citation_type: "journal article"
@@ -352,6 +469,7 @@ IMPORTANT: If you cannot extract some information, use null or empty arrays as a
             - title: (extract if present)
             - year: "2015"
             - journal: "International Journal of Engineering Technology Science and Research"
+            - conference: null (extract if present, eg In Proceedings of the ICASSP the value should be "ICASSP")
             - volume: "2"
             - issue: "10"
             - pages: "1-11"
@@ -479,6 +597,32 @@ IMPORTANT: If you cannot extract some information, use null or empty arrays as a
                             followup_prompt = f"""
                             Continue extracting references from the academic article.
                             You have already extracted {current_count} references out of approximately {total_refs} total references.
+                            
+                            *** CRITICAL INSTRUCTION - CITATION CONTINUITY ACROSS PAGES AND COLUMNS ***
+                            BEFORE processing any citations, you MUST first scan the entire document for citations that are split across pages OR across columns on the same page. This is EXTREMELY common in academic PDFs with multi-column layouts.
+                            
+                            SIGNS OF A SPLIT CITATION (ACROSS PAGES OR COLUMNS):
+                            1. Text that starts mid-sentence without a citation number (e.g., "application of squeeze film dampers...")
+                            2. Text that starts with lowercase letters in the references section
+                            3. Text that starts with conjunctions like "and", "or", "but", "in", "of", "for"
+                            4. Text that contains only publication details without author names
+                            5. Text that appears to be a continuation of a title or journal name
+                            6. Incomplete sentences that continue elsewhere in the document
+                            7. Citations that end abruptly without proper punctuation or completion
+                            8. Text fragments that appear isolated but seem to belong to a larger citation
+                            9. Author lists that appear incomplete (missing "and" or "&" connections)
+                            10. Journal names or titles that appear cut off mid-word
+                            11. Years, volumes, or page numbers that appear without context
+                            
+                            MANDATORY CITATION MERGING PROCESS:
+                            1. First, identify ALL text segments that appear to be reference fragments
+                            2. Look for patterns where one segment ends incompletely and another begins without a number
+                            3. Check for fragments that appear in sequence but seem disconnected
+                            4. ALWAYS combine fragments that belong to the same logical citation, regardless of whether they're on the same page or different pages
+                            5. Use context clues like author names, years, publication patterns, and citation numbering to identify related fragments
+                            6. Pay special attention to multi-column layouts where text may wrap from one column to another
+                            
+                            DO NOT CREATE SEPARATE CITATIONS FOR FRAGMENTS THAT BELONG TOGETHER!
                             
                             Please continue from reference #{current_count + 1} and extract exactly 25 more references.
                             Use the same format as before, providing the following for each reference:
@@ -608,6 +752,14 @@ IMPORTANT: If you cannot extract some information, use null or empty arrays as a
     except Exception as e:
         print(f"Error processing PDF directly: {e}")
         return {"error": f"Error processing PDF: {str(e)}"}
+    finally:
+        # Clean up temporary file if it was created
+        if temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.unlink(temp_file_path)
+                print(f"🗑️ Cleaned up temporary file: {temp_file_path}")
+            except Exception as cleanup_error:
+                print(f"⚠️ Warning: Could not clean up temporary file {temp_file_path}: {cleanup_error}")
 
 async def parse_gemini_response(response, is_metadata=True):
     """Parse the response from Gemini API"""
@@ -1063,10 +1215,63 @@ async def extract_references_with_gemini(pdf_text: str, db: AsyncSession):
         
         prompt = f"""
         Extract all references/citations from this academic article.
-        For each reference, provide the following information in a structured format:
         
-        1. Full reference text (exactly as it appears in the document)
-        2. Citation type (journal, proceedings, book, website/URL, etc.)
+        *** CRITICAL INSTRUCTION - CITATION CONTINUITY ACROSS PAGES AND COLUMNS ***
+        BEFORE processing any citations, you MUST first scan the entire document for citations that are split across pages OR across columns on the same page. This is EXTREMELY common in academic PDFs with multi-column layouts.
+        
+        SIGNS OF A SPLIT CITATION (ACROSS PAGES OR COLUMNS):
+        1. Text that starts mid-sentence without a citation number (e.g., "application of squeeze film dampers...")
+        2. Text that starts with lowercase letters in the references section
+        3. Text that starts with conjunctions like "and", "or", "but", "in", "of", "for"
+        4. Text that contains only publication details without author names
+        5. Text that appears to be a continuation of a title or journal name
+        6. Incomplete sentences that continue elsewhere in the document
+        7. Citations that end abruptly without proper punctuation or completion
+        8. Text fragments that appear isolated but seem to belong to a larger citation
+        9. Author lists that appear incomplete (missing "and" or "&" connections)
+        10. Journal names or titles that appear cut off mid-word
+        11. Years, volumes, or page numbers that appear without context
+        
+        MANDATORY CITATION MERGING PROCESS:
+        1. First, identify ALL text segments that appear to be reference fragments
+        2. Look for patterns where one segment ends incompletely and another begins without a number
+        3. Check for fragments that appear in sequence but seem disconnected
+        4. ALWAYS combine fragments that belong to the same logical citation, regardless of whether they're on the same page or different pages
+        5. Use context clues like author names, years, publication patterns, and citation numbering to identify related fragments
+        6. Pay special attention to multi-column layouts where text may wrap from one column to another
+        
+        DETAILED EXAMPLES OF SPLIT CITATIONS TO MERGE:
+        
+        Example 1 - Title Split Across Columns:
+        Left Column: "15. Smith, J. (2020). Advanced Methods in Machine"
+        Right Column: "Learning for Data Analysis. Journal of AI Research, 45(2), 123-145."
+        → MERGE INTO: "15. Smith, J. (2020). Advanced Methods in Machine Learning for Data Analysis. Journal of AI Research, 45(2), 123-145."
+        
+        Example 2 - Author Split Across Columns:
+        Left Column: "23. Johnson, M.K.; Williams, P.R. & Brown,"
+        Right Column: "A.L. Experimental study of thermal dynamics. Proceedings of ASME, 2019."
+        → MERGE INTO: "23. Johnson, M.K.; Williams, P.R. & Brown, A.L. Experimental study of thermal dynamics. Proceedings of ASME, 2019."
+        
+        Example 3 - Journal Name Split Across Columns:
+        Left Column: "8. Davis, R. (2018). Optimization techniques. International Journal of"
+        Right Column: "Engineering and Technology Sciences, 12(3), 45-67."
+        → MERGE INTO: "8. Davis, R. (2018). Optimization techniques. International Journal of Engineering and Technology Sciences, 12(3), 45-67."
+        
+        Example 4 - Citation Split Between Pages:
+        Page N (end): "12. Anderson, K., Thompson, L., Garcia, M."
+        Page N+1 (start): "& Wilson, S. (2021). Computational fluid dynamics analysis. Nature Physics."
+        → MERGE INTO: "12. Anderson, K., Thompson, L., Garcia, M. & Wilson, S. (2021). Computational fluid dynamics analysis. Nature Physics."
+        
+        Example 5 - Multi-Column Same Page Split:
+        Text appears as: "5. Kumar, S., Lim, S.M., Ramasamy, K. et al. Synthesis," followed later by "molecular docking and biological evaluation of bis-pyrimidine Schiff base derivatives. Chemistry Central Journal 11, 89 (2017)."
+        → MERGE INTO: "5. Kumar, S., Lim, S.M., Ramasamy, K. et al. Synthesis, molecular docking and biological evaluation of bis-pyrimidine Schiff base derivatives. Chemistry Central Journal 11, 89 (2017)."
+        
+        DO NOT CREATE SEPARATE CITATIONS FOR FRAGMENTS THAT BELONG TOGETHER!
+        
+        After ensuring all split citations are properly merged, extract the following for each complete reference:
+        
+        1. Full reference text (exactly as it appears in the document as key "text")
+        2. Citation type (journal article, book, conference paper, website/URL, etc.)
         3. Authors (list of all authors)
         4. Title of the referenced work
         5. Year of publication
@@ -1081,23 +1286,29 @@ async def extract_references_with_gemini(pdf_text: str, db: AsyncSession):
         
         IMPORTANT: If you don't find any references in the text, look carefully for numbered citations, bracketed citations, or any list of sources at the end of the document. References might be formatted in various ways.
         
-        For example, for the reference "1. Akram, f., O. Ilyas and B. A. K. Prusty (2015). International Journal of Engineering Technology Science and Research 2(10): 1-11.", provide:
+        IMPORTANT:
+        - If the reference is a journal article, set "citation_type" to "journal" and fill the "journal" field with the journal name. Leave "conference" empty or null.
+        - If the reference is a conference proceeding, set "citation_type" to "conference proceedings" and fill the "conference" field with the conference name. Leave "journal" empty or null.
+        - For other types, use the appropriate "citation_type" and fill only the relevant fields.
+        
+        For example, for the reference "1. Akram, f., O. Ilyas and B. A. K. Prusty (2015). International Journal of Engineering Technology Science and Research 2(10): 1-11. /n doi: 10.14429/dsj.60.57", provide:
         - text: "1. Akram, f., O. Ilyas and B. A. K. Prusty (2015). International Journal of Engineering Technology Science and Research 2(10): 1-11."
         - citation_type: "journal article"
         - authors: ["Akram, F.", "Ilyas, O.", "Prusty, B.A.K."]
         - title: (extract if present)
         - year: "2015"
         - journal: "International Journal of Engineering Technology Science and Research"
+        - conference: null (extract if present, eg In Proceedings of the ICASSP the value should be "ICASSP")
         - volume: "2"
         - issue: "10"
         - pages: "1-11"
+        - doi: "10.14429/dsj.60.57"
+        - url: (extract if present)
+        - publisher: (extract if present)
         - citation_position: "1"
         
         Return the information in a structured JSON format as an array of reference objects.
         If you absolutely cannot find any references, return an empty array but explain why in a comment.
-        
-        Here is the article text:
-        {text_for_analysis}
         """
         
         # Generate content without safety settings

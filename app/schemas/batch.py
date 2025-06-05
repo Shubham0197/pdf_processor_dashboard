@@ -12,6 +12,7 @@ class BatchOptions(BaseModel):
     extract_references: bool = Field(True, description="Extract references from the PDF")
     extract_metadata: bool = Field(True, description="Extract metadata from the PDF")
     extract_full_text: bool = Field(False, description="Extract full text from the PDF")
+    complete_references: bool = Field(False, description="Extract complete reference information")
 
 class BatchRequest(BaseModel):
     webhook_url: Optional[str] = Field(None, description="URL to send results to when processing is complete")
@@ -30,9 +31,61 @@ class BatchRequest(BaseModel):
                 "options": {
                     "extract_references": True,
                     "extract_metadata": True,
-                    "extract_full_text": False
+                    "extract_full_text": False,
+                    "complete_references": True
                 },
                 "batch_id": "client-batch-123"
+            }
+        }
+
+# New schemas for the enhanced batch processing format
+class EnhancedFileMetadata(BaseModel):
+    year: Optional[str] = Field(None, description="Publication year")
+    issue: Optional[str] = Field(None, description="Issue number")
+    volume: Optional[str] = Field(None, description="Volume number")
+    journal: Optional[str] = Field(None, description="Journal name")
+
+class EnhancedFileRequest(BaseModel):
+    des_id: int = Field(..., description="Destination ID")
+    entry_id: str = Field(..., description="Entry identifier")
+    file_url: str = Field(..., description="URL to the PDF file")
+    metadata: Optional[EnhancedFileMetadata] = Field(None, description="Publication metadata")
+
+class EnhancedBatchOptions(BaseModel):
+    extract_metadata: bool = Field(True, description="Extract metadata from the PDF")
+    extract_full_text: bool = Field(False, description="Extract full text from the PDF")
+    extract_references: bool = Field(True, description="Extract references from the PDF")
+    complete_references: bool = Field(False, description="Extract complete reference information")
+
+class EnhancedBatchRequest(BaseModel):
+    files: List[EnhancedFileRequest] = Field(..., description="List of files to process")
+    options: EnhancedBatchOptions = Field(..., description="Processing options")
+    batch_id: str = Field(..., description="Batch identifier")
+    webhook_url: str = Field(..., description="URL to send results to when processing is complete")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "files": [
+                    {
+                        "des_id": 3,
+                        "entry_id": "20",
+                        "file_url": "http://127.0.0.1:8000/media/dms_files/2/153-154.pdf",
+                        "metadata": {
+                            "year": "1234",
+                            "issue": "12",
+                            "volume": "123",
+                            "journal": "test"
+                        }
+                    }
+                ],
+                "options": {
+                    "extract_metadata": True,
+                    "extract_full_text": True,
+                    "extract_references": True
+                },
+                "batch_id": "9",
+                "webhook_url": "http://127.0.0.1:8000/api-integration/webhook/"
             }
         }
 

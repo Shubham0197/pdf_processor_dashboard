@@ -9,7 +9,7 @@ class ProcessingJob(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     job_id = Column(String(36), unique=True, index=True, default=lambda: str(uuid.uuid4()))
-    batch_id = Column(Integer, ForeignKey("batch_jobs.id"), nullable=True)
+    batch_id = Column(String(36), ForeignKey("batch_jobs.id"), nullable=True)
     file_url = Column(String(255), nullable=False)
     file_name = Column(String(255), nullable=True)
     status = Column(String(20), default="pending")  # pending, processing, completed, failed
@@ -20,6 +20,13 @@ class ProcessingJob(Base):
     # Processing details
     error_message = Column(Text, nullable=True)
     processing_time = Column(Integer, nullable=True)  # in milliseconds
+    
+    # Background job progress tracking fields
+    progress_percentage = Column(Integer, default=0)  # 0-100
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    estimated_completion = Column(DateTime(timezone=True), nullable=True)
+    worker_id = Column(String(255), nullable=True)
+    last_heartbeat = Column(DateTime(timezone=True), nullable=True)
     
     # Results
     extracted_text = Column(Text, nullable=True)
